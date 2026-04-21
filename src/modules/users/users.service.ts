@@ -9,6 +9,10 @@ import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm/dist/common/typeorm.decorators';
 import { hashPassword } from '../../helpers/utils';
+import { CreateAuthDto } from '../../auth/dto/create-auth.dto';
+import { UserStatusEnum } from '../../common/enums/database.enums';
+import { v4 as uuidv4 } from 'uuid';
+import dayjs from 'dayjs';
 
 @Injectable()
 export class UsersService {
@@ -55,5 +59,28 @@ export class UsersService {
 
     user.deletedAt = new Date();
     return await this.usersRepository.save(user);
+  }
+
+  async handleRegister(registerDto: CreateAuthDto) {
+    if (await this.checkEmailExists(registerDto.email)) {
+      throw new BadRequestException('Email already exists');
+    }
+
+    const hashedPassword = await hashPassword(registerDto.passwordHash);
+
+    const user = this.usersRepository.create({
+      email: registerDto.email,
+      passwordHash: hashedPassword,
+      fullName: registerDto.fullName,
+      status: UserStatusEnum.INACTIVE,
+      codeId: uuidv4(),
+      codeExpired: dayjs().add(1, 'day').toDate(),
+    });
+
+    const savedUser = await this.usersRepository.save(user);
+
+    return {
+      id: savedUser.id,
+    };
   }
 }

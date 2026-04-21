@@ -46,6 +46,12 @@ export class User {
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
 
+  @Column({ type: 'uuid', nullable: true })
+  codeId!: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  codeExpired!: Date | null;
+
   @OneToMany(() => DataSource, (dataSource) => dataSource.owner)
   ownedDataSources!: DataSource[];
 

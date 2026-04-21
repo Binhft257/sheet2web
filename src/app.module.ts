@@ -16,6 +16,10 @@ import { ShareTokensModule } from './modules/share-tokens/share-tokens.module';
 import { SourceSheetsModule } from './modules/source-sheets/source-sheets.module';
 import { ThemesModule } from './modules/themes/themes.module';
 import { AuthModule } from './auth/auth.module';
+import { APP_GUARD } from '@nestjs/core';
+import { JwtAuthGuard } from './auth/passport/jwt-auth.guard';
+import { MailerModule } from '@nestjs-modules/mailer';
+import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter';
 
 @Module({
   imports: [
@@ -31,6 +35,7 @@ import { AuthModule } from './auth/auth.module';
     ShareTokensModule,
     SourceSheetsModule,
     ThemesModule,
+    AuthModule,
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -42,9 +47,37 @@ import { AuthModule } from './auth/auth.module';
         synchronize: true,
       }),
     }),
-    AuthModule,
+    MailerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (config: ConfigService) => ({
+        transport: {
+          host: config.get<string>('MAIL_HOST'),
+          port: config.get('MAIL_PORT'),
+          secure: true,
+          auth: {
+            user: config.get<string>('MAIL_USER'),
+            pass: config.get<string>('MAIL_PASS'),
+          },
+        },
+        defaults: {
+          from: config.get('MAIL_FROM'),
+        },
+        // template: {
+        //   dir: __dirname + '/templates',
+        //   adapter: new HandlebarsAdapter(),
+        //   options: { strict: true },
+        // },
+      }),
+    }),
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+  ],
 })
 export class AppModule {}

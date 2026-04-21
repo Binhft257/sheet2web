@@ -1,9 +1,22 @@
-import { IsNotEmpty } from 'class-validator';
+import { Optional } from '@nestjs/common';
+import {
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
+import { UserStatusEnum } from '../../common/enums/database.enums';
 
 export class CreateAuthDto {
-  @IsNotEmpty()
-  username!: string;
+  @IsEmail()
+  email!: string;
 
   @IsNotEmpty()
-  password!: string;
+  @IsString()
+  passwordHash!: string;
+
+  @IsNotEmpty()
+  @IsString()
+  fullName!: string;
 }
