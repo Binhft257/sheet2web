@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CreateDataSourceDto } from './dto/create-data-source.dto';
+import { ListDataSourcesQueryDto } from './dto/list-data-sources-query.dto';
 import { PreviewDataSourceDto } from './dto/preview-data-source.dto';
 import { UpdateDataSourceDto } from './dto/update-data-source.dto';
 import { InjectDataSource } from '@nestjs/typeorm';
@@ -40,6 +41,130 @@ export class DataSourcesService {
     private readonly typeOrmDataSource: TypeOrmDataSource,
     private readonly googleSheetsService: GoogleSheetsService,
   ) {}
+
+  async list(userId: string, listDataSourcesQueryDto: ListDataSourcesQueryDto) {
+    const { page, limit, skip } = this.resolvePagination(
+      listDataSourcesQueryDto.page,
+      listDataSourcesQueryDto.limit,
+    );
+    const normalizedSearch = listDataSourcesQueryDto.search?.trim();
+
+    const queryBuilder = this.typeOrmDataSource.manager
+      .createQueryBuilder(DataSourceEntity, 'dataSource')
+      .where('dataSource.owner_id = :userId', { userId })
+      .andWhere('dataSource.deleted_at IS NULL');
+
+    if (normalizedSearch) {
+      queryBuilder.andWhere('dataSource.title ILIKE :search', {
+        search: `%${normalizedSearch}%`,
+      });
+    }
+
+    if (listDataSourcesQueryDto.status) {
+      queryBuilder.andWhere('dataSource.source_status = :status', {
+        status: listDataSourcesQueryDto.status,
+      });
+    }
+
+    queryBuilder
+      .orderBy('dataSource.created_at', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    const [dataSources, total] = await queryBuilder.getManyAndCount();
+
+    const sheetCountByDataSourceId = new Map<string, number>();
+    if (dataSources.length > 0) {
+      const dataSourceIds = dataSources.map((dataSource) => dataSource.id);
+      const countRows = await this.typeOrmDataSource.manager
+        .createQueryBuilder(SourceSheet, 'sourceSheet')
+        .select('sourceSheet.data_source_id', 'dataSourceId')
+        .addSelect('COUNT(sourceSheet.id)', 'sheetCount')
+        .where('sourceSheet.data_source_id IN (:...dataSourceIds)', {
+          dataSourceIds,
+        })
+        .groupBy('sourceSheet.data_source_id')
+        .getRawMany<{ dataSourceId: string; sheetCount: string }>();
+
+      for (const countRow of countRows) {
+        sheetCountByDataSourceId.set(
+          countRow.dataSourceId,
+          Number(countRow.sheetCount),
+        );
+      }
+    }
+
+    return {
+      items: dataSources.map((dataSource) => ({
+        id: dataSource.id,
+        title: dataSource.title,
+        sourceType: dataSource.sourceType,
+        sourceStatus: dataSource.sourceStatus,
+        spreadsheetId: dataSource.spreadsheetId,
+        sheetCount: sheetCountByDataSourceId.get(dataSource.id) ?? 0,
+        lastSyncedStructureAt: dataSource.lastSyncedStructureAt,
+        lastError: dataSource.lastError,
+        createdAt: dataSource.createdAt,
+        updatedAt: dataSource.updatedAt,
+      })),
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
+  async listSheets(userId: string, dataSourceId: string) {
+    const dataSource = await this.typeOrmDataSource.manager.findOne(
+      DataSourceEntity,
+      {
+        where: {
+          id: dataSourceId,
+          deletedAt: IsNull(),
+        },
+      },
+    );
+
+    if (!dataSource) {
+      throw new NotFoundException('Khong tim thay data source');
+    }
+
+    if (dataSource.ownerId !== userId) {
+      throw new ForbiddenException(
+        'Ban khong co quyen truy cap data source nay.',
+      );
+    }
+
+    const sourceSheets = await this.typeOrmDataSource.manager.find(SourceSheet, {
+      where: { dataSourceId },
+      order: { sortOrder: 'ASC' },
+    });
+
+    return {
+      dataSource: {
+        id: dataSource.id,
+        title: dataSource.title,
+        sourceStatus: dataSource.sourceStatus,
+      },
+      sheets: sourceSheets.map((sourceSheet) => ({
+        id: sourceSheet.id,
+        sheetName: sourceSheet.sheetName,
+        googleSheetId: sourceSheet.googleSheetId,
+        gid: sourceSheet.gid,
+        sortOrder: sourceSheet.sortOrder,
+        isHidden: sourceSheet.isHidden,
+        metadata: {
+          rowCount: this.readMetadataNumber(sourceSheet.metadataJson, 'rowCount'),
+          columnCount: this.readMetadataNumber(
+            sourceSheet.metadataJson,
+            'columnCount',
+          ),
+        },
+      })),
+    };
+  }
 
   async create(userId: string, createDataSourceDto: CreateDataSourceDto) {
     const sourceUrl = createDataSourceDto.sourceUrl.trim();
@@ -411,5 +536,39 @@ export class DataSourcesService {
     if (isDataSourceDuplicate) {
       throw new ConflictException('Data source nay da ton tai');
     }
+  }
+
+  private resolvePagination(page?: number, limit?: number) {
+    const parsedPage = Number(page ?? 1);
+    const parsedLimit = Number(limit ?? 20);
+
+    const safePage = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+    const safeLimit =
+      Number.isInteger(parsedLimit) && parsedLimit > 0
+        ? Math.min(parsedLimit, 100)
+        : 20;
+
+    return {
+      page: safePage,
+      limit: safeLimit,
+      skip: (safePage - 1) * safeLimit,
+    };
+  }
+
+  private readMetadataNumber(
+    metadata: Record<string, unknown> | undefined | null,
+    key: 'rowCount' | 'columnCount',
+  ) {
+    const value = metadata?.[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return null;
   }
 }
