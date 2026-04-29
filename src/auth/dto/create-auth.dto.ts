@@ -20,3 +20,11 @@ export class CreateAuthDto {
   @IsString()
   fullName!: string;
 }
+
+export class CheckCodeDto {
+  @IsNotEmpty({ message: 'ID is required' })
+  id!: string;
+
+  @IsNotEmpty({ message: 'Code is required' })
+  code!: string;
+}

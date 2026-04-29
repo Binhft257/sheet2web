@@ -40,10 +40,10 @@ export class User {
   @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
   deletedAt?: Date | null;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  @Column({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  @Column({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
 
   @Column({ type: 'uuid', nullable: true })
