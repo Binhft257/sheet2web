@@ -7,6 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { UserStatusEnum } from '../../../common/enums/database.enums';
+import { UserRole } from '../../../common/enums/user-role.enum';
 import { DataSource } from '../../data-sources/entities/data-source.entity';
 import { Theme } from '../../themes/entities/theme.entity';
 import { View } from '../../views/entities/view.entity';
@@ -36,6 +37,14 @@ export class User {
     default: UserStatusEnum.ACTIVE,
   })
   status!: UserStatusEnum;
+
+  @Column({
+    type: 'enum',
+    enum: UserRole,
+    enumName: 'user_role_enum',
+    default: UserRole.USER,
+  })
+  role!: UserRole;
 
   @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
   deletedAt?: Date | null;

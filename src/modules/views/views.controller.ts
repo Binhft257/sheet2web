@@ -1,15 +1,37 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
+import { Request } from 'express';
 import { ViewsService } from './views.service';
 import { CreateViewDto } from './dto/create-view.dto';
 import { UpdateViewDto } from './dto/update-view.dto';
+import { JwtAuthGuard } from '../../auth/passport/jwt-auth.guard';
 
 @Controller('views')
 export class ViewsController {
   constructor(private readonly viewsService: ViewsService) {}
 
   @Post()
-  create(@Body() createViewDto: CreateViewDto) {
-    return this.viewsService.create(createViewDto);
+  @UseGuards(JwtAuthGuard)
+  create(
+    @Req() req: Request & { user?: { id?: string } },
+    @Body() createViewDto: CreateViewDto,
+  ) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException('Khong xac dinh duoc nguoi dung dang nhap');
+    }
+
+    return this.viewsService.create(userId, createViewDto);
   }
 
   @Get()
