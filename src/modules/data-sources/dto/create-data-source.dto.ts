@@ -1,52 +1,11 @@
-import {
-  IsDateString,
-  IsEnum,
-  IsObject,
-  IsOptional,
-  IsString,
-  IsUUID,
-} from 'class-validator';
-import {
-  SourceStatusEnum,
-  SourceTypeEnum,
-} from '../../../common/enums/database.enums';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateDataSourceDto {
-  @IsUUID()
-  ownerId!: string;
-
-  @IsOptional()
-  @IsEnum(SourceTypeEnum)
-  sourceType?: SourceTypeEnum;
-
+  @IsNotEmpty()
   @IsString()
   sourceUrl!: string;
 
   @IsOptional()
   @IsString()
-  spreadsheetId?: string;
-
-  @IsOptional()
-  @IsString()
   title?: string;
-
-  @IsOptional()
-  @IsEnum(SourceStatusEnum)
-  sourceStatus?: SourceStatusEnum;
-
-  @IsOptional()
-  @IsObject()
-  connectionMetaJson?: Record<string, any>;
-
-  @IsOptional()
-  @IsDateString()
-  lastSyncedStructureAt?: string;
-
-  @IsOptional()
-  @IsString()
-  lastError?: string;
-
-  @IsOptional()
-  @IsDateString()
-  deletedAt?: string;
 }

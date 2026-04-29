@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   OneToMany,
@@ -19,6 +20,14 @@ import { View } from '../../views/entities/view.entity';
 import { SyncHistory } from '../../sync-histories/entities/sync-history.entity';
 
 @Entity('data_sources')
+@Index(
+  'uq_data_sources_owner_source_spreadsheet_active',
+  ['ownerId', 'sourceType', 'spreadsheetId'],
+  {
+    unique: true,
+    where: '"spreadsheet_id" IS NOT NULL AND "deleted_at" IS NULL',
+  },
+)
 export class DataSource {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
