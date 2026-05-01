@@ -1,34 +1,104 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
+import type { Request } from 'express';
 import { ViewPermissionsService } from './view-permissions.service';
 import { CreateViewPermissionDto } from './dto/create-view-permission.dto';
-import { UpdateViewPermissionDto } from './dto/update-view-permission.dto';
+import { JwtAuthGuard } from '../../auth/passport/jwt-auth.guard';
 
-@Controller('view-permissions')
+@Controller('views/:viewId/permissions')
+@UseGuards(JwtAuthGuard)
 export class ViewPermissionsController {
-  constructor(private readonly viewPermissionsService: ViewPermissionsService) {}
+  constructor(
+    private readonly viewPermissionsService: ViewPermissionsService,
+  ) {}
 
   @Post()
-  create(@Body() createViewPermissionDto: CreateViewPermissionDto) {
-    return this.viewPermissionsService.create(createViewPermissionDto);
+  create(
+    @Req() req: Request & { user?: { id?: string } },
+    @Param(
+      'viewId',
+      new ParseUUIDPipe({
+        exceptionFactory: () =>
+          new BadRequestException('Sai dinh dang view id'),
+      }),
+    )
+    viewId: string,
+    @Body() createViewPermissionDto: CreateViewPermissionDto,
+  ) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException(
+        'Khong xac dinh duoc nguoi dung dang nhap',
+      );
+    }
+
+    return this.viewPermissionsService.create(
+      userId,
+      viewId,
+      createViewPermissionDto,
+    );
   }
 
   @Get()
-  findAll() {
-    return this.viewPermissionsService.findAll();
+  findAll(
+    @Req() req: Request & { user?: { id?: string } },
+    @Param(
+      'viewId',
+      new ParseUUIDPipe({
+        exceptionFactory: () =>
+          new BadRequestException('Sai dinh dang view id'),
+      }),
+    )
+    viewId: string,
+  ) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException(
+        'Khong xac dinh duoc nguoi dung dang nhap',
+      );
+    }
+
+    return this.viewPermissionsService.findAll(userId, viewId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.viewPermissionsService.findOne(+id);
-  }
+  @Delete(':permissionId')
+  remove(
+    @Req() req: Request & { user?: { id?: string } },
+    @Param(
+      'viewId',
+      new ParseUUIDPipe({
+        exceptionFactory: () =>
+          new BadRequestException('Sai dinh dang view id'),
+      }),
+    )
+    viewId: string,
+    @Param(
+      'permissionId',
+      new ParseUUIDPipe({
+        exceptionFactory: () =>
+          new BadRequestException('Sai dinh dang permission id'),
+      }),
+    )
+    permissionId: string,
+  ) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException(
+        'Khong xac dinh duoc nguoi dung dang nhap',
+      );
+    }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateViewPermissionDto: UpdateViewPermissionDto) {
-    return this.viewPermissionsService.update(+id, updateViewPermissionDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.viewPermissionsService.remove(+id);
+    return this.viewPermissionsService.remove(userId, viewId, permissionId);
   }
 }

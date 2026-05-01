@@ -17,8 +17,11 @@ import {
 } from 'typeorm';
 import { View } from './entities/view.entity';
 import {
+  AccessModeEnum,
+  PermissionTypeEnum,
   SelectionTypeEnum,
   SyncStatusEnum,
+  TokenStatusEnum,
   ViewStatusEnum,
 } from '../../common/enums/database.enums';
 import { DataSource as DataSourceEntity } from '../data-sources/entities/data-source.entity';
@@ -31,6 +34,9 @@ import {
 } from '../data-sources/utils/sheet-range.util';
 import { GoogleSheetsService } from '../../google-sheets/google-sheets.service';
 import { ViewSnapshot } from '../view-snapshots/entities/view-snapshot.entity';
+import { ViewPermission } from '../view-permissions/entities/view-permission.entity';
+import { ShareToken } from '../share-tokens/entities/share-token.entity';
+import { hashShareToken } from '../share-tokens/utils/share-token.util';
 
 @Injectable()
 export class ViewsService {
@@ -121,8 +127,12 @@ export class ViewsService {
         .getMany(),
     ]);
 
-    const dataSourceById = new Map(dataSources.map((dataSource) => [dataSource.id, dataSource]));
-    const sourceSheetById = new Map(sourceSheets.map((sourceSheet) => [sourceSheet.id, sourceSheet]));
+    const dataSourceById = new Map(
+      dataSources.map((dataSource) => [dataSource.id, dataSource]),
+    );
+    const sourceSheetById = new Map(
+      sourceSheets.map((sourceSheet) => [sourceSheet.id, sourceSheet]),
+    );
     const currentSnapshotByViewId = new Map<string, ViewSnapshot>();
     for (const currentSnapshot of currentSnapshots) {
       if (!currentSnapshotByViewId.has(currentSnapshot.viewId)) {
@@ -194,7 +204,10 @@ export class ViewsService {
       normalizedRange,
     );
 
-    if (createViewDto.selectionType === SelectionTypeEnum.RANGE && normalizedRange) {
+    if (
+      createViewDto.selectionType === SelectionTypeEnum.RANGE &&
+      normalizedRange
+    ) {
       validateRangeA1Notation(normalizedRange, Number.MAX_SAFE_INTEGER);
     }
 
@@ -275,6 +288,36 @@ export class ViewsService {
   }
 
   async update(userId: string, viewId: string, updateViewDto: UpdateViewDto) {
+    return this.updateByStatus(
+      userId,
+      viewId,
+      updateViewDto,
+      ViewStatusEnum.DRAFT,
+      'Chi co the sua view nhap.',
+    );
+  }
+
+  async updatePublished(
+    userId: string,
+    viewId: string,
+    updateViewDto: UpdateViewDto,
+  ) {
+    return this.updateByStatus(
+      userId,
+      viewId,
+      updateViewDto,
+      ViewStatusEnum.PUBLISHED,
+      'Chi co the sua view da publish.',
+    );
+  }
+
+  private async updateByStatus(
+    userId: string,
+    viewId: string,
+    updateViewDto: UpdateViewDto,
+    expectedStatus: ViewStatusEnum,
+    invalidStatusMessage: string,
+  ) {
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         return await this.typeOrmDataSource.transaction(async (manager) => {
@@ -290,11 +333,12 @@ export class ViewsService {
             throw new ForbiddenException('Ban khong co quyen sua view nay.');
           }
 
-          if (view.status !== ViewStatusEnum.DRAFT) {
-            throw new BadRequestException('Chi co the sua view nhap.');
+          if (view.status !== expectedStatus) {
+            throw new BadRequestException(invalidStatusMessage);
           }
 
-          const nextSelectionType = updateViewDto.selectionType ?? view.selectionType;
+          const nextSelectionType =
+            updateViewDto.selectionType ?? view.selectionType;
           const nextSourceSheetId =
             updateViewDto.sourceSheetId !== undefined
               ? updateViewDto.sourceSheetId
@@ -356,7 +400,11 @@ export class ViewsService {
           }
 
           if (nextName !== view.name) {
-            view.slug = await this.generateUniqueSlug(manager, nextName, view.id);
+            view.slug = await this.generateUniqueSlug(
+              manager,
+              nextName,
+              view.id,
+            );
           }
 
           view.name = nextName;
@@ -437,18 +485,25 @@ export class ViewsService {
     }
 
     if (!dataSource.spreadsheetId) {
-      throw new BadRequestException('Nguon du lieu khong co spreadsheet id hop le.');
+      throw new BadRequestException(
+        'Nguon du lieu khong co spreadsheet id hop le.',
+      );
     }
 
-    const sourceSheet = await this.typeOrmDataSource.manager.findOne(SourceSheet, {
-      where: {
-        id: view.sourceSheetId!,
-        dataSourceId: view.dataSourceId,
+    const sourceSheet = await this.typeOrmDataSource.manager.findOne(
+      SourceSheet,
+      {
+        where: {
+          id: view.sourceSheetId!,
+          dataSourceId: view.dataSourceId,
+        },
       },
-    });
+    );
 
     if (!sourceSheet) {
-      throw new NotFoundException('Khong tim thay sheet trong nguon du lieu nay.');
+      throw new NotFoundException(
+        'Khong tim thay sheet trong nguon du lieu nay.',
+      );
     }
 
     const resolvedRange = this.resolvePublishRange(view, sourceSheet.sheetName);
@@ -547,12 +602,163 @@ export class ViewsService {
     return `This action returns all views`;
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} view`;
+  async findOne(userId: string, viewId: string) {
+    const view = await this.typeOrmDataSource.manager.findOne(View, {
+      where: { id: viewId, deletedAt: IsNull() },
+    });
+
+    if (!view) {
+      throw new NotFoundException('Khong tim thay view.');
+    }
+
+    if (view.ownerId !== userId) {
+      throw new ForbiddenException('Ban khong co quyen xem view nay.');
+    }
+
+    const [dataSource, sourceSheet, currentSnapshot] = await Promise.all([
+      this.typeOrmDataSource.manager.findOne(DataSourceEntity, {
+        where: {
+          id: view.dataSourceId,
+          deletedAt: IsNull(),
+        },
+      }),
+      view.sourceSheetId
+        ? this.typeOrmDataSource.manager.findOne(SourceSheet, {
+            where: {
+              id: view.sourceSheetId,
+              dataSourceId: view.dataSourceId,
+            },
+          })
+        : Promise.resolve(null),
+      this.typeOrmDataSource.manager
+        .createQueryBuilder(ViewSnapshot, 'snapshot')
+        .where('snapshot.view_id = :viewId', { viewId: view.id })
+        .andWhere('snapshot.is_current = true')
+        .orderBy('snapshot.version_no', 'DESC')
+        .getOne(),
+    ]);
+
+    return this.toDetailResponse(
+      view,
+      dataSource,
+      sourceSheet,
+      currentSnapshot,
+    );
+  }
+
+  async findPublishedBySlug(
+    slug: string,
+    userId?: string,
+    shareToken?: string,
+  ) {
+    const normalizedSlug = slug.trim();
+    if (!normalizedSlug) {
+      throw new NotFoundException('Khong tim thay view.');
+    }
+
+    const view = await this.typeOrmDataSource.manager
+      .createQueryBuilder(View, 'view')
+      .where('LOWER(view.slug) = LOWER(:slug)', { slug: normalizedSlug })
+      .andWhere('view.deleted_at IS NULL')
+      .andWhere('view.status = :status', { status: ViewStatusEnum.PUBLISHED })
+      .getOne();
+
+    if (!view) {
+      throw new NotFoundException('Khong tim thay view.');
+    }
+
+    const currentSnapshot = await this.typeOrmDataSource.manager
+      .createQueryBuilder(ViewSnapshot, 'snapshot')
+      .where('snapshot.view_id = :viewId', { viewId: view.id })
+      .andWhere('snapshot.is_current = true')
+      .orderBy('snapshot.version_no', 'DESC')
+      .getOne();
+
+    if (!currentSnapshot) {
+      throw new ConflictException('View chua co snapshot hien tai.');
+    }
+
+    if (view.accessMode === AccessModeEnum.PRIVATE) {
+      const canView = await this.canViewPrivatePublishedView(
+        view,
+        userId,
+        shareToken,
+      );
+
+      if (!canView) {
+        throw new ForbiddenException('Ban khong co quyen xem view nay.');
+      }
+    }
+
+    return this.toPublishedResponse(view, currentSnapshot);
   }
 
   remove(id: number) {
     return `This action removes a #${id} view`;
+  }
+
+  private async canViewPrivatePublishedView(
+    view: View,
+    userId?: string,
+    shareToken?: string,
+  ) {
+    if (userId && view.ownerId === userId) {
+      return true;
+    }
+
+    if (userId) {
+      const hasPermission = await this.typeOrmDataSource.manager
+        .createQueryBuilder(ViewPermission, 'permission')
+        .where('permission.view_id = :viewId', { viewId: view.id })
+        .andWhere('permission.user_id = :userId', { userId })
+        .andWhere('permission.permission_type = :permissionType', {
+          permissionType: PermissionTypeEnum.VIEW,
+        })
+        .getExists();
+
+      if (hasPermission) {
+        return true;
+      }
+    }
+
+    return this.isValidShareToken(view.id, shareToken);
+  }
+
+  private async isValidShareToken(viewId: string, shareToken?: string) {
+    const normalizedToken = shareToken?.trim();
+    if (!normalizedToken) {
+      return false;
+    }
+
+    const tokenHash = hashShareToken(normalizedToken);
+    const savedToken = await this.typeOrmDataSource.manager.findOne(
+      ShareToken,
+      {
+        where: { viewId, tokenHash },
+      },
+    );
+
+    if (!savedToken || savedToken.status !== TokenStatusEnum.ACTIVE) {
+      return false;
+    }
+
+    const now = new Date();
+    if (savedToken.expiresAt && savedToken.expiresAt <= now) {
+      return false;
+    }
+
+    if (
+      typeof savedToken.maxUses === 'number' &&
+      savedToken.usedCount >= savedToken.maxUses
+    ) {
+      return false;
+    }
+
+    savedToken.usedCount += 1;
+    savedToken.lastUsedAt = now;
+    await this.typeOrmDataSource.manager.save(ShareToken, savedToken);
+
+    return true;
   }
 
   private validateSelectionRules(
@@ -623,7 +829,10 @@ export class ViewsService {
     return buildA1Range(sheetName, safeRange);
   }
 
-  private normalizeSnapshotRows(values: string[][], useFirstRowAsHeader: boolean) {
+  private normalizeSnapshotRows(
+    values: string[][],
+    useFirstRowAsHeader: boolean,
+  ) {
     if (!values.length) {
       return {
         headers: [] as string[],
@@ -721,7 +930,8 @@ export class ViewsService {
     const parsedPage = Number(page ?? 1);
     const parsedLimit = Number(limit ?? 20);
 
-    const safePage = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+    const safePage =
+      Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
     const safeLimit =
       Number.isInteger(parsedLimit) && parsedLimit > 0
         ? Math.min(parsedLimit, 100)
@@ -767,6 +977,93 @@ export class ViewsService {
       refreshIntervalSeconds: view.refreshIntervalSeconds,
       allowThemeSwitch: view.allowThemeSwitch,
       updatedAt: view.updatedAt,
+    };
+  }
+
+  private toPublishedResponse(view: View, currentSnapshot: ViewSnapshot) {
+    return {
+      view: {
+        id: view.id,
+        name: view.name,
+        slug: view.slug,
+        accessMode: view.accessMode,
+        themeId: view.themeId,
+        themeOverrideJson: view.themeOverrideJson,
+        settingsJson: view.settingsJson,
+        allowThemeSwitch: view.allowThemeSwitch,
+        lastPublishedAt: view.lastPublishedAt,
+      },
+      snapshot: {
+        id: currentSnapshot.id,
+        versionNo: Number(currentSnapshot.versionNo),
+        headers: Array.isArray(currentSnapshot.headersJson)
+          ? currentSnapshot.headersJson
+          : [],
+        rows: Array.isArray(currentSnapshot.rowsJson)
+          ? currentSnapshot.rowsJson
+          : [],
+        rowCount: currentSnapshot.rowCount,
+        fetchedAt: currentSnapshot.fetchedAt,
+      },
+    };
+  }
+
+  private toDetailResponse(
+    view: View,
+    dataSource?: DataSourceEntity | null,
+    sourceSheet?: SourceSheet | null,
+    currentSnapshot?: ViewSnapshot | null,
+  ) {
+    return {
+      id: view.id,
+      name: view.name,
+      slug: view.slug,
+      status: view.status,
+      accessMode: view.accessMode,
+      selectionType: view.selectionType,
+      dataSourceId: view.dataSourceId,
+      sourceSheetId: view.sourceSheetId,
+      rangeA1Notation: view.rangeA1Notation,
+      useFirstRowAsHeader: view.useFirstRowAsHeader,
+      refreshIntervalSeconds: view.refreshIntervalSeconds,
+      allowThemeSwitch: view.allowThemeSwitch,
+      themeId: view.themeId,
+      themeOverrideJson: view.themeOverrideJson,
+      settingsJson: view.settingsJson,
+      lastPublishedAt: view.lastPublishedAt,
+      createdAt: view.createdAt,
+      updatedAt: view.updatedAt,
+      dataSource: dataSource
+        ? {
+            id: dataSource.id,
+            title: dataSource.title,
+            sourceType: dataSource.sourceType,
+            sourceStatus: dataSource.sourceStatus,
+            spreadsheetId: dataSource.spreadsheetId,
+            lastSyncedStructureAt: dataSource.lastSyncedStructureAt,
+          }
+        : null,
+      sourceSheet: sourceSheet
+        ? {
+            id: sourceSheet.id,
+            sheetName: sourceSheet.sheetName,
+            googleSheetId: sourceSheet.googleSheetId,
+            gid: sourceSheet.gid,
+            sortOrder: sourceSheet.sortOrder,
+            isHidden: sourceSheet.isHidden,
+            metadataJson: sourceSheet.metadataJson,
+          }
+        : null,
+      currentSnapshot: currentSnapshot
+        ? {
+            id: currentSnapshot.id,
+            versionNo: Number(currentSnapshot.versionNo),
+            rowCount: currentSnapshot.rowCount,
+            fetchedAt: currentSnapshot.fetchedAt,
+            syncStatus: currentSnapshot.syncStatus,
+            resolvedRangeA1: currentSnapshot.resolvedRangeA1,
+          }
+        : null,
     };
   }
 }

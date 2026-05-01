@@ -1,18 +1,7 @@
-import { IsEnum, IsOptional, IsUUID } from 'class-validator';
-import { PermissionTypeEnum } from '../../../common/enums/database.enums';
+import { IsEmail, IsNotEmpty } from 'class-validator';
 
 export class CreateViewPermissionDto {
-  @IsUUID()
-  viewId!: string;
-
-  @IsUUID()
-  userId!: string;
-
-  @IsOptional()
-  @IsEnum(PermissionTypeEnum)
-  permissionType?: PermissionTypeEnum;
-
-  @IsOptional()
-  @IsUUID()
-  grantedBy?: string;
+  @IsNotEmpty()
+  @IsEmail()
+  email!: string;
 }
