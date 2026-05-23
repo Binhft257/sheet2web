@@ -3,7 +3,10 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import { CreateViewDto } from './dto/create-view.dto';
 import { ListMyViewsQueryDto } from './dto/list-my-views-query.dto';
@@ -39,12 +42,33 @@ import { ShareToken } from '../share-tokens/entities/share-token.entity';
 import { hashShareToken } from '../share-tokens/utils/share-token.util';
 
 @Injectable()
-export class ViewsService {
+export class ViewsService implements OnModuleInit, OnModuleDestroy {
+  private static readonly AUTO_PUBLISH_INTERVAL_MS = 10_000;
+  private readonly logger = new Logger(ViewsService.name);
+  private autoPublishInterval: NodeJS.Timeout | null = null;
+  private isAutoPublishRunning = false;
+
   constructor(
     @InjectDataSource()
     private readonly typeOrmDataSource: TypeOrmDataSource,
     private readonly googleSheetsService: GoogleSheetsService,
   ) {}
+
+  onModuleInit() {
+    void this.autoPublishViews();
+    this.autoPublishInterval = setInterval(() => {
+      void this.autoPublishViews();
+    }, ViewsService.AUTO_PUBLISH_INTERVAL_MS);
+  }
+
+  onModuleDestroy() {
+    if (!this.autoPublishInterval) {
+      return;
+    }
+
+    clearInterval(this.autoPublishInterval);
+    this.autoPublishInterval = null;
+  }
 
   async listMy(userId: string, listMyViewsQueryDto: ListMyViewsQueryDto) {
     const { page, limit, skip } = this.resolvePagination(
@@ -1065,5 +1089,35 @@ export class ViewsService {
           }
         : null,
     };
+  }
+
+  private async autoPublishViews() {
+    if (this.isAutoPublishRunning) {
+      return;
+    }
+
+    this.isAutoPublishRunning = true;
+    try {
+      const publishedViews = await this.typeOrmDataSource.manager.find(View, {
+        where: {
+          status: ViewStatusEnum.PUBLISHED,
+          deletedAt: IsNull(),
+        },
+      });
+
+      for (const publishedView of publishedViews) {
+        try {
+          await this.publish(publishedView.ownerId, publishedView.id);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Khong the auto publish.';
+          this.logger.warn(
+            `Auto publish view ${publishedView.id} that bai: ${errorMessage}`,
+          );
+        }
+      }
+    } finally {
+      this.isAutoPublishRunning = false;
+    }
   }
 }

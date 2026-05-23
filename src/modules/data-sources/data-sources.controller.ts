@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -72,6 +73,27 @@ export class DataSourcesController {
     }
 
     return this.dataSourcesService.update(userId, id, updateDataSourceDto);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  remove(
+    @Req() req: Request & { user?: { id?: string } },
+    @Param(
+      'id',
+      new ParseUUIDPipe({
+        exceptionFactory: () =>
+          new BadRequestException('Sai dinh dang data source id'),
+      }),
+    )
+    id: string,
+  ) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException('Khong xac dinh duoc nguoi dung dang nhap');
+    }
+
+    return this.dataSourcesService.remove(userId, id);
   }
 
   @Get(':id/sheets')

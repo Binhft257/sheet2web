@@ -137,26 +137,27 @@ export class GoogleSheetsService {
   }
 
   private handleMetadataError(error: unknown): never {
-    const statusCode = this.getGoogleErrorStatusCode(error);
-
-    if (statusCode === 400 || statusCode === 403 || statusCode === 404) {
-      throw new BadRequestException(
-        'Khong doc duoc Google Sheet. Hay kiem tra link share public.',
-      );
-    }
-
-    throw new ServiceUnavailableException(
-      'Google Sheets API tam thoi khong kha dung. Vui long thu lai sau.',
+    this.handleGoogleSheetsError(
+      error,
+      'Khong doc duoc Google Sheet. Hay kiem tra link share public.',
     );
   }
 
   private handleValuesError(error: unknown): never {
+    this.handleGoogleSheetsError(
+      error,
+      'Khong doc duoc Google Sheet. Hay kiem tra quyen chia se hoac range.',
+    );
+  }
+
+  private handleGoogleSheetsError(
+    error: unknown,
+    badRequestMessage: string,
+  ): never {
     const statusCode = this.getGoogleErrorStatusCode(error);
 
     if (statusCode === 400 || statusCode === 403 || statusCode === 404) {
-      throw new BadRequestException(
-        'Khong doc duoc Google Sheet. Hay kiem tra quyen chia se hoac range.',
-      );
+      throw new BadRequestException(badRequestMessage);
     }
 
     throw new ServiceUnavailableException(

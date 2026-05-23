@@ -12,14 +12,18 @@ import { UpdateDataSourceDto } from './dto/update-data-source.dto';
 import { InjectDataSource } from '@nestjs/typeorm';
 import {
   DataSource as TypeOrmDataSource,
+  EntityManager,
   IsNull,
   QueryFailedError,
 } from 'typeorm';
 import { DataSource as DataSourceEntity } from './entities/data-source.entity';
 import { SourceSheet } from '../source-sheets/entities/source-sheet.entity';
+import { View } from '../views/entities/view.entity';
+import { ViewSnapshot } from '../view-snapshots/entities/view-snapshot.entity';
 import {
   SourceStatusEnum,
   SourceTypeEnum,
+  ViewStatusEnum,
 } from '../../common/enums/database.enums';
 import { GoogleSheetsService } from '../../google-sheets/google-sheets.service';
 import { extractSpreadsheetId } from './utils/extract-spreadsheet-id';
@@ -239,14 +243,16 @@ export class DataSourcesService {
     try {
       return await this.typeOrmDataSource.transaction(async (manager) => {
         const dataSource = await manager.findOne(DataSourceEntity, {
-          where: { id: dataSourceId, ownerId: userId },
+          where: { id: dataSourceId, deletedAt: IsNull() },
         });
 
         if (!dataSource) {
           throw new NotFoundException('Khong tim thay data source');
         }
 
-        const previousSpreadsheetId = dataSource.spreadsheetId;
+        if (dataSource.ownerId !== userId) {
+          throw new ForbiddenException('Ban khong co quyen sua data source nay.');
+        }
 
         if (metadata && sourceUrl && spreadsheetId) {
           dataSource.sourceUrl = sourceUrl;
@@ -268,59 +274,11 @@ export class DataSourcesService {
 
         let savedSourceSheets: SourceSheet[];
         if (metadata) {
-          const existingSourceSheets = await manager.find(SourceSheet, {
-            where: { dataSourceId: savedDataSource.id },
-          });
-
-          const hasSpreadsheetChanged =
-            previousSpreadsheetId !== savedDataSource.spreadsheetId;
-          const incomingGoogleSheetIds = new Set(
-            metadata.sheets.map((sheet) => sheet.googleSheetId),
+          savedSourceSheets = await this.syncSourceSheetsWithMetadata(
+            manager,
+            savedDataSource.id,
+            metadata,
           );
-          const staleSourceSheetIds = existingSourceSheets
-            .filter(
-              (sheet) =>
-                hasSpreadsheetChanged ||
-                sheet.googleSheetId == null ||
-                !incomingGoogleSheetIds.has(sheet.googleSheetId),
-            )
-            .map((sheet) => sheet.id);
-
-          if (staleSourceSheetIds.length > 0) {
-            await manager.delete(SourceSheet, staleSourceSheetIds);
-          }
-
-          const existingSheetsByGoogleSheetId = new Map(
-            (hasSpreadsheetChanged ? [] : existingSourceSheets)
-              .filter((sheet) => typeof sheet.googleSheetId === 'number')
-              .map((sheet) => [sheet.googleSheetId as number, sheet]),
-          );
-
-          const sourceSheetsToSave = metadata.sheets.map((sheet) => {
-            const existingSheet = existingSheetsByGoogleSheetId.get(
-              sheet.googleSheetId,
-            );
-
-            if (existingSheet) {
-              existingSheet.sheetName = sheet.sheetName;
-              existingSheet.gid = sheet.gid;
-              existingSheet.sortOrder = sheet.sortOrder;
-              existingSheet.isHidden = sheet.isHidden;
-              existingSheet.metadataJson = sheet.metadataJson;
-              return existingSheet;
-            }
-
-            return manager.create(
-              SourceSheet,
-              this.buildSourceSheetData(savedDataSource.id, sheet),
-            );
-          });
-
-          await manager.save(SourceSheet, sourceSheetsToSave);
-          savedSourceSheets = await manager.find(SourceSheet, {
-            where: { dataSourceId: savedDataSource.id },
-            order: { sortOrder: 'ASC' },
-          });
         } else {
           savedSourceSheets = await manager.find(SourceSheet, {
             where: { dataSourceId: savedDataSource.id },
@@ -334,6 +292,78 @@ export class DataSourcesService {
       this.throwIfDataSourceAlreadyExists(error);
       throw error;
     }
+  }
+
+  async remove(userId: string, dataSourceId: string) {
+    const dataSource = await this.typeOrmDataSource.manager.findOne(
+      DataSourceEntity,
+      {
+        where: {
+          id: dataSourceId,
+          deletedAt: IsNull(),
+        },
+      },
+    );
+
+    if (!dataSource) {
+      throw new NotFoundException('Khong tim thay data source');
+    }
+
+    if (dataSource.ownerId !== userId) {
+      throw new ForbiddenException('Ban khong co quyen xoa data source nay.');
+    }
+
+    const deletedAt = new Date();
+
+    const deletedDataSource = await this.typeOrmDataSource.transaction(
+      async (manager) => {
+        const activeViews = await manager.find(View, {
+          select: { id: true },
+          where: {
+            dataSourceId: dataSource.id,
+            deletedAt: IsNull(),
+          },
+        });
+
+        const viewIds = activeViews.map((view) => view.id);
+        if (viewIds.length > 0) {
+          await manager
+            .createQueryBuilder()
+            .update(ViewSnapshot)
+            .set({
+              isCurrent: false,
+            })
+            .where('view_id IN (:...viewIds)', { viewIds })
+            .andWhere('is_current = true')
+            .execute();
+        }
+
+        await manager
+          .createQueryBuilder()
+          .update(View)
+          .set({
+            deletedAt,
+            status: ViewStatusEnum.ARCHIVED,
+          })
+          .where('data_source_id = :dataSourceId', { dataSourceId: dataSource.id })
+          .andWhere('deleted_at IS NULL')
+          .execute();
+
+        dataSource.deletedAt = deletedAt;
+        dataSource.sourceStatus = SourceStatusEnum.DISCONNECTED;
+        dataSource.lastError = null;
+
+        return manager.save(DataSourceEntity, dataSource);
+      },
+    );
+
+    return {
+      id: deletedDataSource.id,
+      sourceStatus: deletedDataSource.sourceStatus,
+      deletedAt: deletedDataSource.deletedAt,
+      deletedViews: true,
+      deactivatedViewSnapshots: true,
+    };
   }
 
   async preview(
@@ -570,5 +600,55 @@ export class DataSourcesService {
       }
     }
     return null;
+  }
+
+  private async syncSourceSheetsWithMetadata(
+    manager: EntityManager,
+    dataSourceId: string,
+    metadata: GoogleSheetsMetadata,
+  ) {
+    const sourceSheetPayloads = metadata.sheets.map((sheet) => ({
+      ...this.buildSourceSheetData(dataSourceId, sheet),
+      dataSourceId,
+      metadataJson: sheet.metadataJson as Record<string, any>,
+    }));
+
+    if (sourceSheetPayloads.length > 0) {
+      await manager.upsert(SourceSheet, sourceSheetPayloads, [
+        'dataSourceId',
+        'googleSheetId',
+      ]);
+    }
+
+    const incomingGoogleSheetIds = sourceSheetPayloads
+      .map((sheet) => sheet.googleSheetId)
+      .filter((googleSheetId): googleSheetId is number =>
+        typeof googleSheetId === 'number',
+      );
+
+    if (incomingGoogleSheetIds.length === 0) {
+      await manager
+        .createQueryBuilder()
+        .delete()
+        .from(SourceSheet)
+        .where('data_source_id = :dataSourceId', { dataSourceId })
+        .execute();
+    } else {
+      await manager
+        .createQueryBuilder()
+        .delete()
+        .from(SourceSheet)
+        .where('data_source_id = :dataSourceId', { dataSourceId })
+        .andWhere(
+          '(google_sheet_id IS NULL OR google_sheet_id NOT IN (:...incomingGoogleSheetIds))',
+          { incomingGoogleSheetIds },
+        )
+        .execute();
+    }
+
+    return manager.find(SourceSheet, {
+      where: { dataSourceId },
+      order: { sortOrder: 'ASC' },
+    });
   }
 }
