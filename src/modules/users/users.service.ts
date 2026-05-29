@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm/dist/common/typeorm.decorators';
 import { hashPassword } from '../../helpers/utils';
@@ -45,6 +45,18 @@ export class UsersService {
 
   findOne(id: string) {
     return this.usersRepository.findOneBy({ id });
+  }
+
+  async findProfile(userId: string) {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId, deletedAt: IsNull() },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Khong tim thay user');
+    }
+
+    return this.toProfileResponse(user);
   }
 
   update(id: string, updateUserDto: UpdateUserDto) {
@@ -180,6 +192,18 @@ export class UsersService {
     return {
       id: user.id,
       email: user.email,
+    };
+  }
+
+  private toProfileResponse(user: User) {
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      status: user.status,
+      role: user.role,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
     };
   }
 }

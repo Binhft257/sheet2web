@@ -8,7 +8,10 @@ import {
   Delete,
   ParseUUIDPipe,
   BadRequestException,
+  Req,
+  UnauthorizedException,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -26,6 +29,16 @@ export class UsersController {
   @Get()
   findAll() {
     return this.usersService.findAll();
+  }
+
+  @Get('me')
+  findMe(@Req() req: Request & { user?: { id?: string } }) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException('Khong xac dinh duoc nguoi dung dang nhap');
+    }
+
+    return this.usersService.findProfile(userId);
   }
 
   @Get(':id')

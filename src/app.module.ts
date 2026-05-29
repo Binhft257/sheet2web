@@ -16,6 +16,7 @@ import { ShareTokensModule } from './modules/share-tokens/share-tokens.module';
 import { SourceSheetsModule } from './modules/source-sheets/source-sheets.module';
 import { ThemesModule } from './modules/themes/themes.module';
 import { AuthModule } from './auth/auth.module';
+import { ViewerModule } from './modules/viewer/viewer.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/passport/jwt-auth.guard';
 import { MailerModule } from '@nestjs-modules/mailer';
@@ -35,6 +36,7 @@ import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.ad
     ShareTokensModule,
     SourceSheetsModule,
     ThemesModule,
+    ViewerModule,
     AuthModule,
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
