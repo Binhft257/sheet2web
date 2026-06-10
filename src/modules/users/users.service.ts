@@ -9,7 +9,12 @@ import { IsNull, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm/dist/common/typeorm.decorators';
 import { hashPassword } from '../../helpers/utils';
-import { CheckCodeDto, CreateAuthDto } from '../../auth/dto/create-auth.dto';
+import {
+  CheckCodeDto,
+  CreateAuthDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from '../../auth/dto/create-auth.dto';
 import { UserStatusEnum } from '../../common/enums/database.enums';
 import { v4 as uuidv4 } from 'uuid';
 import dayjs from 'dayjs';
@@ -192,6 +197,74 @@ export class UsersService {
     return {
       id: user.id,
       email: user.email,
+    };
+  }
+
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+    const user = await this.usersRepository.findOneBy({
+      email: forgotPasswordDto.email,
+    });
+
+    if (!user) {
+      throw new BadRequestException('Email khong ton tai.');
+    }
+
+    if (user.status !== UserStatusEnum.ACTIVE) {
+      throw new BadRequestException('Tai khoan chua duoc kich hoat.');
+    }
+
+    const code = uuidv4();
+    user.codeId = code;
+    user.codeExpired = dayjs().add(5, 'minutes').toDate();
+
+    await this.usersRepository.save(user);
+
+    this.mailerService.sendMail({
+      to: user.email,
+      subject: 'Reset your password',
+      template: 'forgot-password.hbs',
+      context: {
+        name: user?.fullName ?? user.email,
+        resetCode: code,
+      },
+    });
+
+    return {
+      id: user.id,
+      email: user.email,
+    };
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto) {
+    const user = await this.usersRepository.findOneBy({
+      id: resetPasswordDto.id,
+    });
+
+    if (!user) {
+      throw new NotFoundException('Invalid id');
+    }
+
+    if (!user.codeId || !user.codeExpired) {
+      throw new BadRequestException('Ma code khong ton tai, vui long gui lai email');
+    }
+
+    if (user.codeId !== resetPasswordDto.code) {
+      throw new BadRequestException('Ma code khong dung, vui long kiem tra lai');
+    }
+
+    if (dayjs().isAfter(dayjs(user.codeExpired))) {
+      throw new BadRequestException('Ma cua ban da het han, vui long gui lai email');
+    }
+
+    user.passwordHash = await hashPassword(resetPasswordDto.passwordHash);
+    user.codeId = null;
+    user.codeExpired = null;
+    user.updatedAt = dayjs().toDate();
+
+    await this.usersRepository.save(user);
+
+    return {
+      message: 'Reset password successfully',
     };
   }
 

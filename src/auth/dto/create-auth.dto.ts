@@ -28,3 +28,20 @@ export class CheckCodeDto {
   @IsNotEmpty({ message: 'Code is required' })
   code!: string;
 }
+
+export class ForgotPasswordDto {
+  @IsEmail()
+  email!: string;
+}
+
+export class ResetPasswordDto {
+  @IsNotEmpty({ message: 'ID is required' })
+  id!: string;
+
+  @IsNotEmpty({ message: 'Code is required' })
+  code!: string;
+
+  @IsNotEmpty()
+  @IsString()
+  passwordHash!: string;
+}

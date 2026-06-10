@@ -3,7 +3,12 @@ import { UsersService } from '../modules/users/users.service';
 import { comparePasswordHelper } from '../helpers/utils';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '../modules/users/entities/user.entity';
-import { CheckCodeDto, CreateAuthDto } from './dto/create-auth.dto';
+import {
+  CheckCodeDto,
+  CreateAuthDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from './dto/create-auth.dto';
 
 @Injectable()
 export class AuthService {
@@ -47,5 +52,13 @@ export class AuthService {
 
   async retryActivation(email: { email: string }) {
     return await this.usersService.retryActivation(email);
+  }
+
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+    return await this.usersService.forgotPassword(forgotPasswordDto);
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto) {
+    return await this.usersService.resetPassword(resetPasswordDto);
   }
 }
