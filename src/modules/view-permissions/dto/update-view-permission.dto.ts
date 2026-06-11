@@ -1,4 +1,6 @@
-import { PartialType } from '@nestjs/mapped-types';
+import { PartialType } from '@nestjs/swagger';
 import { CreateViewPermissionDto } from './create-view-permission.dto';
 
-export class UpdateViewPermissionDto extends PartialType(CreateViewPermissionDto) {}
+export class UpdateViewPermissionDto extends PartialType(
+  CreateViewPermissionDto,
+) {}

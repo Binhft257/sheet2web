@@ -9,7 +9,12 @@ import { IsNull, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm/dist/common/typeorm.decorators';
 import { hashPassword } from '../../helpers/utils';
-import { CheckCodeDto, CreateAuthDto } from '../../auth/dto/create-auth.dto';
+import {
+  CheckCodeDto,
+  CreateAuthDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from '../../auth/dto/create-auth.dto';
 import { UserStatusEnum } from '../../common/enums/database.enums';
 import { v4 as uuidv4 } from 'uuid';
 import dayjs from 'dayjs';
@@ -22,15 +27,17 @@ export class UsersService {
     private readonly usersRepository: Repository<User>,
     private readonly mailerService: MailerService,
   ) {}
+
   async checkEmailExists(email: string) {
     return await this.usersRepository.findOneBy({ email });
   }
+
   async create(createUserDto: CreateUserDto) {
     const hashedPassword = await hashPassword(createUserDto.passwordHash);
     createUserDto.passwordHash = hashedPassword;
 
     if (await this.checkEmailExists(createUserDto.email)) {
-      throw new BadRequestException('Email already exists');
+      throw new BadRequestException('Email đã tồn tại');
     }
     const user = this.usersRepository.create(createUserDto);
     return this.usersRepository.save(user);
@@ -39,6 +46,7 @@ export class UsersService {
   findAll() {
     return this.usersRepository.find();
   }
+
   async findOneByEmail(email: string) {
     return await this.usersRepository.findOneBy({ email });
   }
@@ -53,7 +61,7 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException('Khong tim thay user');
+      throw new NotFoundException('Không tìm thấy user');
     }
 
     return this.toProfileResponse(user);
@@ -77,7 +85,7 @@ export class UsersService {
 
   async handleRegister(registerDto: CreateAuthDto) {
     if (await this.checkEmailExists(registerDto.email)) {
-      throw new BadRequestException('Email already exists');
+      throw new BadRequestException('Email đã tồn tại');
     }
 
     const hashedPassword = await hashPassword(registerDto.passwordHash);
@@ -116,7 +124,7 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException('Invalid id');
+      throw new NotFoundException('ID không hợp lệ');
     }
 
     if (!user.codeId || !user.codeExpired) {
@@ -126,7 +134,7 @@ export class UsersService {
     }
 
     if (user.status === UserStatusEnum.ACTIVE) {
-      throw new BadRequestException('Tài khoan đã được kích hoạt trước đó');
+      throw new BadRequestException('Tài khoản đã được kích hoạt trước đó');
     }
 
     if (user.codeId !== checkCodeDto.code) {
@@ -147,7 +155,7 @@ export class UsersService {
 
     await this.usersRepository.save(user);
     return {
-      message: 'Verify account successfully',
+      message: 'Xác minh tài khoản thành công',
     };
   }
 
@@ -156,28 +164,22 @@ export class UsersService {
       email: body.email,
     });
 
-    // 1. Nếu không có user
     if (!user) {
       throw new BadRequestException('Email không tồn tại.');
     }
 
-    // 2. Nếu user đã active rồi
     if (user.status === UserStatusEnum.ACTIVE) {
       throw new BadRequestException('Tài khoản đã được kích hoạt.');
     }
 
-    // 3. Nếu user chưa active thì tạo code mới
     const code = uuidv4();
-
     const codeExpired = dayjs().add(5, 'minutes').toDate();
 
-    // 4. Lưu code mới vào database
     user.codeId = code;
     user.codeExpired = codeExpired;
 
     await this.usersRepository.save(user);
 
-    // 5. Gửi email chứa code mới
     this.mailerService.sendMail({
       to: user.email,
       subject: 'Activate your account',
@@ -188,10 +190,83 @@ export class UsersService {
       },
     });
 
-    // 6. Trả id về cho frontend
     return {
       id: user.id,
       email: user.email,
+    };
+  }
+
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+    const user = await this.usersRepository.findOneBy({
+      email: forgotPasswordDto.email,
+    });
+
+    if (!user) {
+      throw new BadRequestException('Email không tồn tại.');
+    }
+
+    if (user.status !== UserStatusEnum.ACTIVE) {
+      throw new BadRequestException('Tài khoản chưa được kích hoạt.');
+    }
+
+    const code = uuidv4();
+    user.codeId = code;
+    user.codeExpired = dayjs().add(5, 'minutes').toDate();
+
+    await this.usersRepository.save(user);
+
+    this.mailerService.sendMail({
+      to: user.email,
+      subject: 'Reset your password',
+      template: 'forgot-password.hbs',
+      context: {
+        name: user?.fullName ?? user.email,
+        resetCode: code,
+      },
+    });
+
+    return {
+      id: user.id,
+      email: user.email,
+    };
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto) {
+    const user = await this.usersRepository.findOneBy({
+      id: resetPasswordDto.id,
+    });
+
+    if (!user) {
+      throw new NotFoundException('ID không hợp lệ');
+    }
+
+    if (!user.codeId || !user.codeExpired) {
+      throw new BadRequestException(
+        'Mã code không tồn tại, vui lòng gửi lại email',
+      );
+    }
+
+    if (user.codeId !== resetPasswordDto.code) {
+      throw new BadRequestException(
+        'Mã code không đúng, vui lòng kiểm tra lại',
+      );
+    }
+
+    if (dayjs().isAfter(dayjs(user.codeExpired))) {
+      throw new BadRequestException(
+        'Mã của bạn đã hết hạn, vui lòng gửi lại email',
+      );
+    }
+
+    user.passwordHash = await hashPassword(resetPasswordDto.passwordHash);
+    user.codeId = null;
+    user.codeExpired = null;
+    user.updatedAt = dayjs().toDate();
+
+    await this.usersRepository.save(user);
+
+    return {
+      message: 'Đặt lại mật khẩu thành công',
     };
   }
 

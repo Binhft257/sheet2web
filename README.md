@@ -1,6 +1,6 @@
 # Sheet2Web
 
-Sheet2Web is a NestJS backend API for turning public Google Sheets into publishable web views. It provides user authentication, Google Sheets data-source syncing, view publishing, public view access, viewer dashboards, permissions, share tokens, and supporting CRUD modules.
+Sheet2Web is a NestJS backend API for turning public Google Sheets into publishable web views. It provides user authentication, Google Sheets data-source syncing, view publishing, public view access, viewer dashboards, permissions, share tokens, and supporting domain modules.
 
 ## Table of Contents
 
@@ -20,7 +20,7 @@ Sheet2Web is a NestJS backend API for turning public Google Sheets into publisha
 
 ## About The Project
 
-This project is a backend API built with NestJS and TypeScript. It lets authenticated users connect Google Sheets as data sources, read sheet metadata and values through the Google Sheets API, create views from full sheets or ranges, publish snapshots, and expose published views by slug with optional permissions or share tokens.
+This project is a backend API built with NestJS and TypeScript. It lets authenticated users connect Google Sheets as data sources, read sheet metadata and values through the Google Sheets API, create views from full sheets or ranges, publish snapshots, and expose published views by slug with optional owner, permission, or share-token access.
 
 ## Tech Stack
 
@@ -31,6 +31,7 @@ This project is a backend API built with NestJS and TypeScript. It lets authenti
 - Passport Local and Passport JWT
 - JWT (`@nestjs/jwt`)
 - Class Validator and Class Transformer
+- Swagger/OpenAPI (`@nestjs/swagger`, `swagger-ui-express`)
 - Google Sheets API (`googleapis`)
 - Nest Config Module
 - Nest Mailer Module with Handlebars templates
@@ -42,22 +43,26 @@ This project is a backend API built with NestJS and TypeScript. It lets authenti
 
 ## Current Features
 
-- User registration, login, activation-code verification, and activation-code retry.
+- User registration, login, activation-code verification, activation-code retry, forgot-password, and reset-password flows.
 - Password hashing with `bcrypt`.
 - JWT access token generation and validation.
 - Global JWT protection with `APP_GUARD`, with selected public routes using `@Public()`.
+- Global role checking with `RolesGuard`; admin-only routes currently exist in the users module.
+- Swagger UI served at `/api/docs`.
 - PostgreSQL persistence through TypeORM entities, repositories, transactions, and query builders.
 - Google Sheets data-source creation from a Google Sheet URL.
 - Google Sheet metadata sync, including spreadsheet title and sheet/tab metadata.
-- Data-source listing, updating, soft deletion, sheet listing, and data preview.
-- View creation, listing, updating, publishing, and published snapshot storage.
+- Data-source listing with pagination, search, and status filtering.
+- Data-source updating, soft deletion, sheet listing, and data preview.
+- View creation, owner listing, updating, publishing, automatic republishing, and published snapshot storage.
 - Public view access by slug through `/api/v/:slug`.
 - Optional authenticated access detection on public views.
-- Viewer dashboard and viewer view listing for accessible views.
+- Private published view access by owner, explicit permission, or valid share token.
+- Viewer dashboard and viewer listing for views explicitly shared through permissions.
 - View permissions by user email.
 - Share-token creation, listing, and revocation.
-- Mail sending for account activation.
-- Basic CRUD modules for users, themes, source sheets, source tables, sync histories, audit logs, cell change logs, and view snapshots.
+- Mail sending for account activation and password reset.
+- Supporting domain modules for themes, source sheets, source tables, sync histories, audit logs, cell change logs, and view snapshots. These modules currently provide entities/services/DTOs but do not expose public CRUD controllers.
 
 ## System Flow
 
@@ -69,10 +74,11 @@ This project is a backend API built with NestJS and TypeScript. It lets authenti
 4. The user verifies the activation code.
 5. The user logs in with email and password.
 6. `LocalAuthGuard` validates the credentials.
-7. `AuthService` creates a JWT payload and signs an access token.
+7. `AuthService` creates a JWT payload containing `sub`, `email`, and `role`.
 8. The client sends the token in the `Authorization` header.
 9. `JwtStrategy` validates the token.
 10. The validated user payload is attached to `req.user`.
+11. `RolesGuard` checks `@Roles(...)` metadata when a route requires a role.
 
 ### Sheet-to-Web Flow
 
@@ -80,12 +86,13 @@ This project is a backend API built with NestJS and TypeScript. It lets authenti
 2. The server extracts the Google spreadsheet ID from the URL.
 3. `GoogleSheetsService` reads spreadsheet metadata using `GOOGLE_SHEETS_API_KEY`.
 4. The server stores the data source and its sheet tabs.
-5. The user creates a view from a data source and a source sheet.
+5. The user creates a view from a data source and source sheet.
 6. The user publishes the view.
 7. The server reads Google Sheet values for the selected full sheet or range.
-8. The server stores the published data as a `ViewSnapshot`.
+8. The server stores the published data as a current `ViewSnapshot`.
 9. A published view can be opened through `/api/v/:slug`.
-10. Private views require ownership, explicit permission, or a valid share token.
+10. Private views require ownership, explicit permission, or a valid `shareToken` query parameter.
+11. Published views are automatically republished on a short interval by `ViewsService`.
 
 ## Getting Started
 
@@ -95,7 +102,7 @@ This project is a backend API built with NestJS and TypeScript. It lets authenti
 - npm
 - PostgreSQL database
 - Google Sheets API key
-- SMTP credentials for activation emails
+- SMTP credentials for activation and password reset emails
 
 ### Installation
 
@@ -105,7 +112,7 @@ npm install
 
 ## Environment Variables
 
-The project reads configuration through `ConfigService`. Create a `.env` file in the project root:
+The project reads configuration through `ConfigService`. Create a `.env` file in the project root. A blank `.env.example` is included so new developers know which variables must be filled.
 
 ```env
 PORT=3000
@@ -125,6 +132,7 @@ MAIL_FROM="Sheet2Web <no-reply@example.com>"
 
 Notes:
 
+- `PORT` is required by `main.ts`.
 - `DATABASE_URL` is used by TypeORM with `type: 'postgres'`.
 - `JWT_ACCESS_TOKEN_EXPIRED` is converted to a number before being passed to JWT sign options.
 - `MAIL_PORT` is read from the environment and passed directly to the mailer config.
@@ -148,13 +156,17 @@ npm run start:prod
 
 ## Usage
 
-The API uses a global prefix:
+Most API routes use the global prefix:
 
 ```txt
 http://localhost:3000/api
 ```
 
-There is no Swagger/OpenAPI setup in the current codebase.
+Swagger UI is available at:
+
+```txt
+http://localhost:3000/api/docs
+```
 
 ### Login Example
 
@@ -225,23 +237,26 @@ All endpoints below include the `/api` global prefix.
 
 ### Auth
 
-| Method | Endpoint                 | Description                                  | Auth Required |
-| ------ | ------------------------ | -------------------------------------------- | ------------- |
-| POST   | `/api/auth/register`     | Register a user and send an activation email | No            |
-| POST   | `/api/auth/check-code`   | Verify an activation code                    | No            |
-| POST   | `/api/auth/retry-active` | Send a new activation code                   | No            |
-| POST   | `/api/auth/login`        | Login and receive a JWT access token         | No            |
-| GET    | `/api/auth/mail`         | Send a hard-coded test email                 | No            |
+| Method | Endpoint                    | Description                                  | Auth Required |
+| ------ | --------------------------- | -------------------------------------------- | ------------- |
+| POST   | `/api/auth/register`        | Register a user and send an activation email | No            |
+| POST   | `/api/auth/check-code`      | Verify an activation code                    | No            |
+| POST   | `/api/auth/retry-active`    | Send a new activation code                   | No            |
+| POST   | `/api/auth/forgot-password` | Send a password reset code                   | No            |
+| POST   | `/api/auth/reset-password`  | Reset password with a valid code             | No            |
+| POST   | `/api/auth/login`           | Login and receive a JWT access token         | No            |
+| GET    | `/api/auth/mail`            | Send a hard-coded test email                 | No            |
 
 ### Users
 
-| Method | Endpoint         | Description        | Auth Required |
-| ------ | ---------------- | ------------------ | ------------- |
-| POST   | `/api/users`     | Create a user      | No            |
-| GET    | `/api/users`     | List users         | Yes           |
-| GET    | `/api/users/:id` | Get a user by ID   | Yes           |
-| PATCH  | `/api/users/:id` | Update a user      | Yes           |
-| DELETE | `/api/users/:id` | Soft-delete a user | Yes           |
+| Method | Endpoint            | Description                         | Auth Required |
+| ------ | ------------------- | ----------------------------------- | ------------- |
+| POST   | `/api/users`        | Create a user                       | Yes, admin    |
+| GET    | `/api/users`        | List users                          | Yes, admin    |
+| GET    | `/api/users/me`     | Get current user's profile          | Yes           |
+| GET    | `/api/users/:id`    | Get a user by ID                    | Yes, admin    |
+| PATCH  | `/api/users/:id`    | Update a user                       | Yes, admin    |
+| DELETE | `/api/users/:id`    | Soft-delete a user                  | Yes, admin    |
 
 ### Data Sources
 
@@ -250,23 +265,28 @@ All endpoints below include the `/api` global prefix.
 | GET    | `/api/data-sources`             | List current user's data sources         | Yes           |
 | POST   | `/api/data-sources`             | Create a Google Sheets data source       | Yes           |
 | PATCH  | `/api/data-sources/:id`         | Update a data source                     | Yes           |
-| DELETE | `/api/data-sources/:id`         | Soft-delete a data source                | Yes           |
+| DELETE | `/api/data-sources/:id`         | Soft-delete a data source and archive related active views | Yes |
 | GET    | `/api/data-sources/:id/sheets`  | List sheets for a data source            | Yes           |
 | POST   | `/api/data-sources/:id/preview` | Preview values from a source sheet/range | Yes           |
+
+`GET /api/data-sources` supports `page`, `limit`, `search`, and `status`.
 
 ### Views
 
 | Method | Endpoint                   | Description                          | Auth Required |
 | ------ | -------------------------- | ------------------------------------ | ------------- |
-| POST   | `/api/views`               | Create a view                        | Yes           |
-| GET    | `/api/views`               | List all views                       | Yes           |
+| POST   | `/api/views`               | Create a draft view                  | Yes           |
 | GET    | `/api/views/my`            | List current user's views            | Yes           |
-| GET    | `/api/views/:id`           | Get a view by ID                     | Yes           |
-| PATCH  | `/api/views/:id`           | Update a view                        | Yes           |
-| PATCH  | `/api/views/:id/published` | Update published state/config fields | Yes           |
+| GET    | `/api/views/:id`           | Get an owned view by ID              | Yes           |
+| PATCH  | `/api/views/:id`           | Update an owned draft view           | Yes           |
+| PATCH  | `/api/views/:id/published` | Update an owned published view       | Yes           |
 | POST   | `/api/views/:id/publish`   | Publish a view and create a snapshot | Yes           |
-| DELETE | `/api/views/:id`           | Delete a view                        | Yes           |
+| DELETE | `/api/views/:id`           | Soft-delete a view                   | Yes           |
 | GET    | `/api/v/:slug`             | Read a published view by slug        | No            |
+
+`GET /api/views/my` supports `page`, `limit`, `search`, `status`, and `accessMode`.
+
+`GET /api/v/:slug` supports optional `Authorization: Bearer <access_token>` and optional `?shareToken=<token>` for private published views.
 
 ### View Permissions
 
@@ -284,24 +304,28 @@ All endpoints below include the `/api` global prefix.
 | GET    | `/api/views/:viewId/share-tokens`                 | List share tokens    | Yes           |
 | PATCH  | `/api/views/:viewId/share-tokens/:tokenId/revoke` | Revoke a share token | Yes           |
 
+Share-token creation accepts optional `name` and `expiresAt`. The raw token appears only in the create response URL; list responses show a masked preview.
+
 ### Viewer
 
-| Method | Endpoint                | Description                                 | Auth Required |
-| ------ | ----------------------- | ------------------------------------------- | ------------- |
-| GET    | `/api/viewer/dashboard` | Get viewer dashboard data                   | Yes           |
-| GET    | `/api/viewer/views`     | List views accessible to the current viewer | Yes           |
+| Method | Endpoint                | Description                                               | Auth Required |
+| ------ | ----------------------- | --------------------------------------------------------- | ------------- |
+| GET    | `/api/viewer/dashboard` | Get viewer dashboard data                                 | Yes           |
+| GET    | `/api/viewer/views`     | List published views explicitly shared with current viewer | Yes           |
 
-### Supporting CRUD Modules
+`GET /api/viewer/views` supports `page`, `limit`, `search`, `accessMode`, and `sort`.
 
-The following controllers expose standard `POST`, `GET`, `GET :id`, `PATCH :id`, and `DELETE :id` endpoints:
+### Supporting Domain Modules
 
-- `/api/audit-logs`
-- `/api/cell-change-logs`
-- `/api/source-sheets`
-- `/api/source-tables`
-- `/api/sync-histories`
-- `/api/themes`
-- `/api/view-snapshots`
+The following modules currently provide entities, DTOs, and services for internal/domain use, but do not expose public CRUD controllers:
+
+- `audit-logs`
+- `cell-change-logs`
+- `source-sheets`
+- `source-tables`
+- `sync-histories`
+- `themes`
+- `view-snapshots`
 
 ## Project Structure
 
@@ -309,25 +333,25 @@ The following controllers expose standard `POST`, `GET`, `GET :id`, `PATCH :id`,
 src/
 |-- auth/                 # Authentication, local strategy, JWT strategy, guards
 |-- common/               # Shared enums
-|-- decorator/            # Custom decorators such as @Public()
+|-- decorator/            # Custom decorators such as @Public() and @Roles()
 |-- google-sheets/        # Google Sheets API integration
 |-- helpers/              # Shared helpers such as password hashing
 |-- mail/                 # Mail templates
 |-- modules/              # Feature modules and database entities
 |-- app.module.ts         # Root module and infrastructure configuration
-|-- app.controller.ts     # Root health-style endpoint
-`-- main.ts               # Application bootstrap
+|-- app.controller.ts     # Root status-style endpoint
+`-- main.ts               # Application bootstrap, validation pipe, Swagger setup
 ```
 
 Key feature modules under `src/modules/`:
 
-- `users`: user persistence, activation code handling, and user CRUD.
-- `data-sources`: Google Sheet data-source management and preview.
-- `views`: view configuration, publishing, snapshots, and public view lookup.
-- `viewer`: viewer dashboard and accessible view listing.
+- `users`: user persistence, activation code handling, password reset, profile, and admin user management.
+- `data-sources`: Google Sheet data-source management, sheet listing, pagination, filtering, and preview.
+- `views`: view configuration, publishing, snapshots, auto-publishing, and public view lookup.
+- `viewer`: viewer dashboard and explicitly shared published view listing.
 - `view-permissions`: user-level view access.
 - `share-tokens`: token-based view sharing.
-- `themes`, `source-sheets`, `source-tables`, `sync-histories`, `audit-logs`, `cell-change-logs`, `view-snapshots`: supporting domain modules.
+- `themes`, `source-sheets`, `source-tables`, `sync-histories`, `audit-logs`, `cell-change-logs`, `view-snapshots`: supporting domain modules without exposed CRUD controllers.
 
 ## Scripts
 
@@ -349,21 +373,23 @@ Key feature modules under `src/modules/`:
 ## Future Updates
 
 - Add Excel file support as an additional data source, allowing users to import and manage data from `.xlsx` files besides Google Sheets.
-- Add Swagger/OpenAPI documentation.
 - Add refresh token support.
-- Expand role-based authorization; role metadata and guard scaffolding already exist.
+- Expand role-based authorization beyond the current admin-only users endpoints.
 - Improve automated test coverage for auth, data-source sync, publishing, permissions, and share tokens.
 - Add Docker and Docker Compose for local PostgreSQL and app startup.
 - Add CI checks for linting, tests, and build.
 - Add write-back support from the web app to Google Sheets, enabling users to edit records in the web interface and sync those changes back to the source sheet.
+- Integrate the UI/API into existing tools, for example Google Sheets with Apps Script or Microsoft Teams.
 
 ## Notes
 
 - Protected routes require `Authorization: Bearer <access_token>`.
 - Public routes are marked with the custom `@Public()` decorator.
+- Role-protected routes use the custom `@Roles()` decorator and global `RolesGuard`.
 - `JWT_SECRET` must match between token signing and validation.
 - `GOOGLE_SHEETS_API_KEY` is required for data-source creation, sheet listing, preview, and view publishing.
 - The current Google Sheets integration uses an API key, so linked spreadsheets must be publicly readable.
 - TypeORM is configured with `synchronize: false`; database schema creation/migration must be handled outside the current runtime configuration.
 - `ValidationPipe` is enabled globally with `whitelist` and `forbidNonWhitelisted`.
-- No Swagger endpoint or Postman collection is currently included in the repository.
+- Swagger UI is currently available at `/api/docs`.
+- The root status endpoint is excluded from the `/api` prefix and is protected unless explicitly made public in code.

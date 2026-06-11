@@ -10,11 +10,14 @@ import { AuthService } from '../auth.service';
 @Injectable()
 export class LocalStrategy extends PassportStrategy(Strategy) {
   constructor(private authService: AuthService) {
-    super();
+    super({
+      usernameField: 'email',
+      passwordField: 'passwordHash',
+    });
   }
 
-  async validate(username: string, password: string): Promise<any> {
-    const user = await this.authService.validateUser(username, password);
+  async validate(email: string, passwordHash: string): Promise<any> {
+    const user = await this.authService.validateUser(email, passwordHash);
     if (user.status === 'inactive') {
       throw new BadRequestException('Tài khoản chưa được kích hoạt');
     }

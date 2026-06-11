@@ -89,7 +89,7 @@ export class ShareTokensService {
     );
 
     if (!shareToken) {
-      throw new NotFoundException('Khong tim thay share token.');
+      throw new NotFoundException('Không tìm thấy share token.');
     }
 
     shareToken.status = TokenStatusEnum.REVOKED;
@@ -112,11 +112,11 @@ export class ShareTokensService {
     });
 
     if (!view) {
-      throw new NotFoundException('Khong tim thay view.');
+      throw new NotFoundException('Không tìm thấy view.');
     }
 
     if (view.ownerId !== userId) {
-      throw new ForbiddenException('Ban khong co quyen quan ly view nay.');
+      throw new ForbiddenException('Bạn không có quyền quản lý view này.');
     }
 
     return view;

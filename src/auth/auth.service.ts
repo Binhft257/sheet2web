@@ -3,7 +3,12 @@ import { UsersService } from '../modules/users/users.service';
 import { comparePasswordHelper } from '../helpers/utils';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '../modules/users/entities/user.entity';
-import { CheckCodeDto, CreateAuthDto } from './dto/create-auth.dto';
+import {
+  CheckCodeDto,
+  CreateAuthDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from './dto/create-auth.dto';
 
 @Injectable()
 export class AuthService {
@@ -15,7 +20,7 @@ export class AuthService {
   async validateUser(email: string, pass: string): Promise<any> {
     const user = await this.usersService.findOneByEmail(email);
     if (!user) {
-      throw new UnauthorizedException('Email or password is incorrect');
+      throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
 
     const isValidPassword = await comparePasswordHelper(
@@ -23,7 +28,7 @@ export class AuthService {
       user.passwordHash,
     );
     if (!isValidPassword) {
-      throw new UnauthorizedException('Email or password is incorrect');
+      throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
 
     return user;
@@ -47,5 +52,13 @@ export class AuthService {
 
   async retryActivation(email: { email: string }) {
     return await this.usersService.retryActivation(email);
+  }
+
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+    return await this.usersService.forgotPassword(forgotPasswordDto);
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto) {
+    return await this.usersService.resetPassword(resetPasswordDto);
   }
 }

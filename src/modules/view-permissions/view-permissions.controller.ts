@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadRequestException,
   Body,
   Controller,
@@ -11,11 +11,26 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
+  ApiBearerAuth,
+  ApiBody,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import { ViewPermissionsService } from './view-permissions.service';
 import { CreateViewPermissionDto } from './dto/create-view-permission.dto';
 import { JwtAuthGuard } from '../../auth/passport/jwt-auth.guard';
 
+@ApiTags('Quyền truy cập view')
+@ApiBearerAuth()
 @Controller('views/:viewId/permissions')
 @UseGuards(JwtAuthGuard)
 export class ViewPermissionsController {
@@ -24,13 +39,27 @@ export class ViewPermissionsController {
   ) {}
 
   @Post()
+  @ApiOperation({
+    summary: 'Cấp quyền truy cập view',
+    description: 'Cấp quyền cho người dùng truy cập view.',
+  })
+  @ApiParam({ name: 'viewId', description: 'UUID của view.', format: 'uuid' })
+  @ApiBody({ type: CreateViewPermissionDto })
+  @ApiCreatedResponse({ description: 'Tạo quyền truy cập view thành công.' })
+  @ApiBadRequestResponse({
+    description: 'ID view hoặc dữ liệu gửi lên không hợp lệ.',
+  })
+  @ApiUnauthorizedResponse({ description: 'Thiếu hoặc sai Bearer token.' })
+  @ApiNotFoundResponse({
+    description: 'Không tìm thấy view hoặc người dùng đích.',
+  })
   create(
     @Req() req: Request & { user?: { id?: string } },
     @Param(
       'viewId',
       new ParseUUIDPipe({
         exceptionFactory: () =>
-          new BadRequestException('Sai dinh dang view id'),
+          new BadRequestException('Sai định dạng view id'),
       }),
     )
     viewId: string,
@@ -39,7 +68,7 @@ export class ViewPermissionsController {
     const userId = req.user?.id;
     if (!userId) {
       throw new UnauthorizedException(
-        'Khong xac dinh duoc nguoi dung dang nhap',
+        'Không xác định được người dùng đang đăng nhập',
       );
     }
 
@@ -51,13 +80,24 @@ export class ViewPermissionsController {
   }
 
   @Get()
+  @ApiOperation({
+    summary: 'Danh sách quyền truy cập view',
+    description: 'Liệt kê người dùng có quyền truy cập view.',
+  })
+  @ApiParam({ name: 'viewId', description: 'UUID của view.', format: 'uuid' })
+  @ApiOkResponse({
+    description: 'Trả về danh sách quyền truy cập view thành công.',
+  })
+  @ApiBadRequestResponse({ description: 'ID view không hợp lệ.' })
+  @ApiUnauthorizedResponse({ description: 'Thiếu hoặc sai Bearer token.' })
+  @ApiNotFoundResponse({ description: 'Không tìm thấy view.' })
   findAll(
     @Req() req: Request & { user?: { id?: string } },
     @Param(
       'viewId',
       new ParseUUIDPipe({
         exceptionFactory: () =>
-          new BadRequestException('Sai dinh dang view id'),
+          new BadRequestException('Sai định dạng view id'),
       }),
     )
     viewId: string,
@@ -65,7 +105,7 @@ export class ViewPermissionsController {
     const userId = req.user?.id;
     if (!userId) {
       throw new UnauthorizedException(
-        'Khong xac dinh duoc nguoi dung dang nhap',
+        'Không xác định được người dùng đang đăng nhập',
       );
     }
 
@@ -73,13 +113,32 @@ export class ViewPermissionsController {
   }
 
   @Delete(':permissionId')
+  @ApiOperation({
+    summary: 'Xóa quyền truy cập view',
+    description: 'Xóa một quyền truy cập khỏi view.',
+  })
+  @ApiParam({ name: 'viewId', description: 'UUID của view.', format: 'uuid' })
+  @ApiParam({
+    name: 'permissionId',
+    description: 'UUID của quyền truy cập view.',
+    format: 'uuid',
+  })
+  @ApiNoContentResponse({
+    description: 'Xóa quyền truy cập view thành công.',
+  })
+  @ApiOkResponse({ description: 'Trả về kết quả xóa thành công.' })
+  @ApiBadRequestResponse({
+    description: 'ID view hoặc ID quyền truy cập không hợp lệ.',
+  })
+  @ApiUnauthorizedResponse({ description: 'Thiếu hoặc sai Bearer token.' })
+  @ApiNotFoundResponse({ description: 'Không tìm thấy quyền truy cập view.' })
   remove(
     @Req() req: Request & { user?: { id?: string } },
     @Param(
       'viewId',
       new ParseUUIDPipe({
         exceptionFactory: () =>
-          new BadRequestException('Sai dinh dang view id'),
+          new BadRequestException('Sai định dạng view id'),
       }),
     )
     viewId: string,
@@ -87,7 +146,7 @@ export class ViewPermissionsController {
       'permissionId',
       new ParseUUIDPipe({
         exceptionFactory: () =>
-          new BadRequestException('Sai dinh dang permission id'),
+          new BadRequestException('Sai định dạng permission id'),
       }),
     )
     permissionId: string,
@@ -95,7 +154,7 @@ export class ViewPermissionsController {
     const userId = req.user?.id;
     if (!userId) {
       throw new UnauthorizedException(
-        'Khong xac dinh duoc nguoi dung dang nhap',
+        'Không xác định được người dùng đang đăng nhập',
       );
     }
 

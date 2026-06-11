@@ -132,19 +132,22 @@ export class DataSourcesService {
     );
 
     if (!dataSource) {
-      throw new NotFoundException('Khong tim thay data source');
+      throw new NotFoundException('Không tìm thấy data source');
     }
 
     if (dataSource.ownerId !== userId) {
       throw new ForbiddenException(
-        'Ban khong co quyen truy cap data source nay.',
+        'Bạn không có quyền truy cập data source này.',
       );
     }
 
-    const sourceSheets = await this.typeOrmDataSource.manager.find(SourceSheet, {
-      where: { dataSourceId },
-      order: { sortOrder: 'ASC' },
-    });
+    const sourceSheets = await this.typeOrmDataSource.manager.find(
+      SourceSheet,
+      {
+        where: { dataSourceId },
+        order: { sortOrder: 'ASC' },
+      },
+    );
 
     return {
       dataSource: {
@@ -160,7 +163,10 @@ export class DataSourcesService {
         sortOrder: sourceSheet.sortOrder,
         isHidden: sourceSheet.isHidden,
         metadata: {
-          rowCount: this.readMetadataNumber(sourceSheet.metadataJson, 'rowCount'),
+          rowCount: this.readMetadataNumber(
+            sourceSheet.metadataJson,
+            'rowCount',
+          ),
           columnCount: this.readMetadataNumber(
             sourceSheet.metadataJson,
             'columnCount',
@@ -247,11 +253,13 @@ export class DataSourcesService {
         });
 
         if (!dataSource) {
-          throw new NotFoundException('Khong tim thay data source');
+          throw new NotFoundException('Không tìm thấy data source');
         }
 
         if (dataSource.ownerId !== userId) {
-          throw new ForbiddenException('Ban khong co quyen sua data source nay.');
+          throw new ForbiddenException(
+            'Bạn không có quyền sửa data source này.',
+          );
         }
 
         if (metadata && sourceUrl && spreadsheetId) {
@@ -270,7 +278,10 @@ export class DataSourcesService {
             null;
         }
 
-        const savedDataSource = await manager.save(DataSourceEntity, dataSource);
+        const savedDataSource = await manager.save(
+          DataSourceEntity,
+          dataSource,
+        );
 
         let savedSourceSheets: SourceSheet[];
         if (metadata) {
@@ -306,11 +317,11 @@ export class DataSourcesService {
     );
 
     if (!dataSource) {
-      throw new NotFoundException('Khong tim thay data source');
+      throw new NotFoundException('Không tìm thấy data source');
     }
 
     if (dataSource.ownerId !== userId) {
-      throw new ForbiddenException('Ban khong co quyen xoa data source nay.');
+      throw new ForbiddenException('Bạn không có quyền xóa data source này.');
     }
 
     const deletedAt = new Date();
@@ -345,7 +356,9 @@ export class DataSourcesService {
             deletedAt,
             status: ViewStatusEnum.ARCHIVED,
           })
-          .where('data_source_id = :dataSourceId', { dataSourceId: dataSource.id })
+          .where('data_source_id = :dataSourceId', {
+            dataSourceId: dataSource.id,
+          })
           .andWhere('deleted_at IS NULL')
           .execute();
 
@@ -382,28 +395,35 @@ export class DataSourcesService {
     );
 
     if (!dataSource) {
-      throw new NotFoundException('Khong tim thay nguon du lieu.');
+      throw new NotFoundException('Không tìm thấy nguồn dữ liệu.');
     }
 
     if (dataSource.ownerId !== userId) {
       throw new ForbiddenException(
-        'Ban khong co quyen preview nguon du lieu nay.',
+        'Bạn không có quyền preview nguồn dữ liệu này.',
       );
     }
 
-    const sourceSheet = await this.typeOrmDataSource.manager.findOne(SourceSheet, {
-      where: {
-        id: previewDataSourceDto.sourceSheetId,
-        dataSourceId: dataSourceId,
+    const sourceSheet = await this.typeOrmDataSource.manager.findOne(
+      SourceSheet,
+      {
+        where: {
+          id: previewDataSourceDto.sourceSheetId,
+          dataSourceId: dataSourceId,
+        },
       },
-    });
+    );
 
     if (!sourceSheet) {
-      throw new NotFoundException('Khong tim thay sheet trong nguon du lieu nay.');
+      throw new NotFoundException(
+        'Không tìm thấy sheet trong nguồn dữ liệu này.',
+      );
     }
 
     if (!dataSource.spreadsheetId) {
-      throw new BadRequestException('Nguon du lieu khong co spreadsheet id hop le.');
+      throw new BadRequestException(
+        'Nguồn dữ liệu không có spreadsheet id hợp lệ.',
+      );
     }
 
     const normalizedRange = previewDataSourceDto.rangeA1Notation.trim();
@@ -419,7 +439,8 @@ export class DataSourcesService {
       fullRange,
     );
 
-    const useFirstRowAsHeader = previewDataSourceDto.useFirstRowAsHeader ?? true;
+    const useFirstRowAsHeader =
+      previewDataSourceDto.useFirstRowAsHeader ?? true;
     const { headers, rows } = this.normalizePreviewRows(
       values,
       useFirstRowAsHeader,
@@ -440,7 +461,9 @@ export class DataSourcesService {
 
   private validateMetadataHasSheets(metadata: GoogleSheetsMetadata) {
     if (metadata.sheets.length === 0) {
-      throw new BadRequestException('Google Sheet khong co sheet nao de dong bo');
+      throw new BadRequestException(
+        'Google Sheet không có sheet nào để đồng bộ',
+      );
     }
   }
 
@@ -512,7 +535,10 @@ export class DataSourcesService {
     };
   }
 
-  private toResponse(dataSource: DataSourceEntity, sourceSheets: SourceSheet[]) {
+  private toResponse(
+    dataSource: DataSourceEntity,
+    sourceSheets: SourceSheet[],
+  ) {
     return {
       id: dataSource.id,
       title: dataSource.title,
@@ -564,7 +590,7 @@ export class DataSourcesService {
       detail.includes('owner_id');
 
     if (isDataSourceDuplicate) {
-      throw new ConflictException('Data source nay da ton tai');
+      throw new ConflictException('Data source này đã tồn tại');
     }
   }
 
@@ -572,7 +598,8 @@ export class DataSourcesService {
     const parsedPage = Number(page ?? 1);
     const parsedLimit = Number(limit ?? 20);
 
-    const safePage = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+    const safePage =
+      Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
     const safeLimit =
       Number.isInteger(parsedLimit) && parsedLimit > 0
         ? Math.min(parsedLimit, 100)
@@ -622,8 +649,9 @@ export class DataSourcesService {
 
     const incomingGoogleSheetIds = sourceSheetPayloads
       .map((sheet) => sheet.googleSheetId)
-      .filter((googleSheetId): googleSheetId is number =>
-        typeof googleSheetId === 'number',
+      .filter(
+        (googleSheetId): googleSheetId is number =>
+          typeof googleSheetId === 'number',
       );
 
     if (incomingGoogleSheetIds.length === 0) {
