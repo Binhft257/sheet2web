@@ -246,12 +246,12 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
           });
 
           if (!dataSource) {
-            throw new NotFoundException('Khong tim thay nguon du lieu.');
+            throw new NotFoundException('Không tìm thấy nguồn dữ liệu.');
           }
 
           if (dataSource.ownerId !== userId) {
             throw new ForbiddenException(
-              'Ban khong co quyen tao view cho nguon du lieu nay.',
+              'Bạn không có quyền tạo view cho nguồn dữ liệu này.',
             );
           }
 
@@ -264,13 +264,13 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
 
           if (!sourceSheet) {
             throw new NotFoundException(
-              'Khong tim thay sheet trong nguon du lieu nay.',
+              'Không tìm thấy sheet trong nguồn dữ liệu này.',
             );
           }
 
           const resolvedName = normalizedName || sourceSheet.sheetName?.trim();
           if (!resolvedName) {
-            throw new BadRequestException('Khong the xac dinh ten view.');
+            throw new BadRequestException('Không thể xác định tên view.');
           }
 
           const slug = await this.generateUniqueSlug(manager, resolvedName);
@@ -308,7 +308,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    throw new ConflictException('Khong the tao slug duy nhat cho view nay.');
+    throw new ConflictException('Không thể tạo slug duy nhất cho view này.');
   }
 
   async update(userId: string, viewId: string, updateViewDto: UpdateViewDto) {
@@ -317,7 +317,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
       viewId,
       updateViewDto,
       ViewStatusEnum.DRAFT,
-      'Chi co the sua view nhap.',
+      'Chỉ có thể sửa view nháp.',
     );
   }
 
@@ -331,7 +331,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
       viewId,
       updateViewDto,
       ViewStatusEnum.PUBLISHED,
-      'Chi co the sua view da publish.',
+      'Chỉ có thể sửa view đã publish.',
     );
   }
 
@@ -350,11 +350,11 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
           });
 
           if (!view) {
-            throw new NotFoundException('Khong tim thay view.');
+            throw new NotFoundException('Không tìm thấy view.');
           }
 
           if (view.ownerId !== userId) {
-            throw new ForbiddenException('Ban khong co quyen sua view nay.');
+            throw new ForbiddenException('Bạn không có quyền sửa view này.');
           }
 
           if (view.status !== expectedStatus) {
@@ -375,7 +375,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
                 : null;
             if (incomingRange) {
               throw new BadRequestException(
-                'full_sheet khong cho phep rangeA1Notation.',
+                'full_sheet không cho phép rangeA1Notation.',
               );
             }
             normalizedRange = null;
@@ -410,7 +410,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
 
           if (!sourceSheet) {
             throw new NotFoundException(
-              'Khong tim thay sheet trong nguon du lieu nay.',
+              'Không tìm thấy sheet trong nguồn dữ liệu này.',
             );
           }
 
@@ -418,7 +418,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
           if (updateViewDto.name !== undefined) {
             const normalizedName = updateViewDto.name.trim();
             if (!normalizedName) {
-              throw new BadRequestException('name khong duoc de trong.');
+              throw new BadRequestException('name không được để trống.');
             }
             nextName = normalizedName;
           }
@@ -472,7 +472,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    throw new ConflictException('Khong the tao slug duy nhat cho view nay.');
+    throw new ConflictException('Không thể tạo slug duy nhất cho view này.');
   }
 
   async publish(userId: string, viewId: string) {
@@ -481,11 +481,11 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
     });
 
     if (!view) {
-      throw new NotFoundException('Khong tim thay view.');
+      throw new NotFoundException('Không tìm thấy view.');
     }
 
     if (view.ownerId !== userId) {
-      throw new ForbiddenException('Ban khong co quyen publish view nay.');
+      throw new ForbiddenException('Bạn không có quyền publish view này.');
     }
 
     this.validatePublishSelection(view);
@@ -501,16 +501,16 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
     );
 
     if (!dataSource) {
-      throw new NotFoundException('Khong tim thay nguon du lieu.');
+      throw new NotFoundException('Không tìm thấy nguồn dữ liệu.');
     }
 
     if (dataSource.ownerId !== userId) {
-      throw new ForbiddenException('Ban khong co quyen publish view nay.');
+      throw new ForbiddenException('Bạn không có quyền publish view này.');
     }
 
     if (!dataSource.spreadsheetId) {
       throw new BadRequestException(
-        'Nguon du lieu khong co spreadsheet id hop le.',
+        'Nguồn dữ liệu không có spreadsheet id hợp lệ.',
       );
     }
 
@@ -526,7 +526,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
 
     if (!sourceSheet) {
       throw new NotFoundException(
-        'Khong tim thay sheet trong nguon du lieu nay.',
+        'Không tìm thấy sheet trong nguồn dữ liệu này.',
       );
     }
 
@@ -546,11 +546,11 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
       });
 
       if (!freshView) {
-        throw new NotFoundException('Khong tim thay view.');
+        throw new NotFoundException('Không tìm thấy view.');
       }
 
       if (freshView.ownerId !== userId) {
-        throw new ForbiddenException('Ban khong co quyen publish view nay.');
+        throw new ForbiddenException('Bạn không có quyền publish view này.');
       }
 
       await manager
@@ -622,21 +622,17 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  findAll() {
-    return `This action returns all views`;
-  }
-
   async findOne(userId: string, viewId: string) {
     const view = await this.typeOrmDataSource.manager.findOne(View, {
       where: { id: viewId, deletedAt: IsNull() },
     });
 
     if (!view) {
-      throw new NotFoundException('Khong tim thay view.');
+      throw new NotFoundException('Không tìm thấy view.');
     }
 
     if (view.ownerId !== userId) {
-      throw new ForbiddenException('Ban khong co quyen xem view nay.');
+      throw new ForbiddenException('Bạn không có quyền xem view này.');
     }
 
     const [dataSource, sourceSheet, currentSnapshot] = await Promise.all([
@@ -677,7 +673,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
   ) {
     const normalizedSlug = slug.trim();
     if (!normalizedSlug) {
-      throw new NotFoundException('Khong tim thay view.');
+      throw new NotFoundException('Không tìm thấy view.');
     }
 
     const view = await this.typeOrmDataSource.manager
@@ -688,7 +684,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
       .getOne();
 
     if (!view) {
-      throw new NotFoundException('Khong tim thay view.');
+      throw new NotFoundException('Không tìm thấy view.');
     }
 
     const currentSnapshot = await this.typeOrmDataSource.manager
@@ -699,7 +695,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
       .getOne();
 
     if (!currentSnapshot) {
-      throw new ConflictException('View chua co snapshot hien tai.');
+      throw new ConflictException('View chưa có snapshot hiện tại.');
     }
 
     if (view.accessMode === AccessModeEnum.PRIVATE) {
@@ -710,15 +706,35 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
       );
 
       if (!canView) {
-        throw new ForbiddenException('Ban khong co quyen xem view nay.');
+        throw new ForbiddenException('Bạn không có quyền xem view này.');
       }
     }
 
     return this.toPublishedResponse(view, currentSnapshot);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} view`;
+  async remove(userId: string, viewId: string) {
+    const view = await this.typeOrmDataSource.manager.findOne(View, {
+      where: { id: viewId, deletedAt: IsNull() },
+    });
+
+    if (!view) {
+      throw new NotFoundException('Không tìm thấy view.');
+    }
+
+    if (view.ownerId !== userId) {
+      throw new ForbiddenException('Bạn không có quyền xóa view này.');
+    }
+
+    view.deletedAt = new Date();
+    await this.typeOrmDataSource.manager.save(View, view);
+
+    return {
+      message: 'Xóa view thành công',
+      id: view.id,
+      status: view.status,
+      deletedAt: view.deletedAt,
+    };
   }
 
   private async canViewPrivatePublishedView(
@@ -792,7 +808,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
   ) {
     if (selectionType === SelectionTypeEnum.TABLE) {
       throw new BadRequestException(
-        'Selection type table chua duoc ho tro o phase nay.',
+        'Selection type table chưa được hỗ trợ ở phase này.',
       );
     }
 
@@ -800,44 +816,44 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
       selectionType !== SelectionTypeEnum.FULL_SHEET &&
       selectionType !== SelectionTypeEnum.RANGE
     ) {
-      throw new BadRequestException('Selection type khong hop le.');
+      throw new BadRequestException('Selection type không hợp lệ.');
     }
 
     if (!sourceSheetId) {
-      throw new BadRequestException('sourceSheetId la bat buoc.');
+      throw new BadRequestException('sourceSheetId là bắt buộc.');
     }
 
     if (selectionType === SelectionTypeEnum.FULL_SHEET && rangeA1Notation) {
       throw new BadRequestException(
-        'full_sheet khong cho phep rangeA1Notation.',
+        'full_sheet không cho phép rangeA1Notation.',
       );
     }
 
     if (selectionType === SelectionTypeEnum.RANGE && !rangeA1Notation) {
-      throw new BadRequestException('rangeA1Notation la bat buoc cho range.');
+      throw new BadRequestException('rangeA1Notation là bắt buộc cho range.');
     }
   }
 
   private validatePublishSelection(view: View) {
     if (view.selectionType === SelectionTypeEnum.TABLE) {
       throw new BadRequestException(
-        'Selection type table chua duoc ho tro o phase nay.',
+        'Selection type table chưa được hỗ trợ ở phase này.',
       );
     }
 
     if (!view.dataSourceId) {
-      throw new BadRequestException('View khong co data source hop le.');
+      throw new BadRequestException('View không có data source hợp lệ.');
     }
 
     if (!view.sourceSheetId) {
-      throw new BadRequestException('View khong co source sheet hop le.');
+      throw new BadRequestException('View không có source sheet hợp lệ.');
     }
 
     if (
       view.selectionType === SelectionTypeEnum.RANGE &&
       !view.rangeA1Notation?.trim()
     ) {
-      throw new BadRequestException('View khong co rangeA1Notation hop le.');
+      throw new BadRequestException('View không có rangeA1Notation hợp lệ.');
     }
   }
 
@@ -914,7 +930,7 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
       suffix += 1;
     }
 
-    throw new ConflictException('Khong the tao slug duy nhat cho view nay.');
+    throw new ConflictException('Không thể tạo slug duy nhất cho view này.');
   }
 
   private isSlugUniqueViolation(error: unknown) {
@@ -1110,9 +1126,9 @@ export class ViewsService implements OnModuleInit, OnModuleDestroy {
           await this.publish(publishedView.ownerId, publishedView.id);
         } catch (error) {
           const errorMessage =
-            error instanceof Error ? error.message : 'Khong the auto publish.';
+            error instanceof Error ? error.message : 'Không thể auto publish.';
           this.logger.warn(
-            `Auto publish view ${publishedView.id} that bai: ${errorMessage}`,
+            `Auto publish view ${publishedView.id} thất bại: ${errorMessage}`,
           );
         }
       }

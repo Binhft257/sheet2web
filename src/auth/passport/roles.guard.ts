@@ -26,11 +26,11 @@ export class RolesGuard implements CanActivate {
     const user = request.user as { role?: UserRole } | undefined;
 
     if (!user || !user.role) {
-      throw new ForbiddenException('Ban khong co quyen truy cap.');
+      throw new ForbiddenException('Bạn không có quyền truy cập.');
     }
 
     if (!requiredRoles.includes(user.role)) {
-      throw new ForbiddenException('Ban khong co quyen truy cap.');
+      throw new ForbiddenException('Bạn không có quyền truy cập.');
     }
 
     return true;

@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadRequestException,
   Body,
   Controller,
@@ -13,6 +13,20 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
+  ApiBearerAuth,
+  ApiBody,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import { ViewsService } from './views.service';
 import { CreateViewDto } from './dto/create-view.dto';
@@ -22,12 +36,23 @@ import { JwtAuthGuard } from '../../auth/passport/jwt-auth.guard';
 import { Public } from '../../decorator/customize';
 import { JwtService } from '@nestjs/jwt';
 
+@ApiTags('View')
 @Controller('views')
 export class ViewsController {
   constructor(private readonly viewsService: ViewsService) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Tạo view',
+    description:
+      'Tạo view từ nguồn dữ liệu đã kết nối cho người dùng đang đăng nhập.',
+  })
+  @ApiBody({ type: CreateViewDto })
+  @ApiCreatedResponse({ description: 'Tạo view thành công.' })
+  @ApiBadRequestResponse({ description: 'Dữ liệu view không hợp lệ.' })
+  @ApiUnauthorizedResponse({ description: 'Thiếu hoặc sai Bearer token.' })
   create(
     @Req() req: Request & { user?: { id?: string } },
     @Body() createViewDto: CreateViewDto,
@@ -35,20 +60,24 @@ export class ViewsController {
     const userId = req.user?.id;
     if (!userId) {
       throw new UnauthorizedException(
-        'Khong xac dinh duoc nguoi dung dang nhap',
+        'Không xác định được người dùng đang đăng nhập',
       );
     }
 
     return this.viewsService.create(userId, createViewDto);
   }
 
-  @Get()
-  findAll() {
-    return this.viewsService.findAll();
-  }
-
   @Get('my')
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Danh sách view của tôi',
+    description:
+      'Trả về danh sách view có phân trang của người dùng đang đăng nhập.',
+  })
+  @ApiOkResponse({ description: 'Trả về danh sách view thành công.' })
+  @ApiBadRequestResponse({ description: 'Tham số truy vấn không hợp lệ.' })
+  @ApiUnauthorizedResponse({ description: 'Thiếu hoặc sai Bearer token.' })
   findMyViews(
     @Req() req: Request & { user?: { id?: string } },
     @Query() listMyViewsQueryDto: ListMyViewsQueryDto,
@@ -56,7 +85,7 @@ export class ViewsController {
     const userId = req.user?.id;
     if (!userId) {
       throw new UnauthorizedException(
-        'Khong xac dinh duoc nguoi dung dang nhap',
+        'Không xác định được người dùng đang đăng nhập',
       );
     }
 
@@ -65,13 +94,23 @@ export class ViewsController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Lấy view theo ID',
+    description: 'Trả về một view thuộc người dùng đang đăng nhập.',
+  })
+  @ApiParam({ name: 'id', description: 'UUID của view.', format: 'uuid' })
+  @ApiOkResponse({ description: 'Trả về view thành công.' })
+  @ApiBadRequestResponse({ description: 'ID view không hợp lệ.' })
+  @ApiUnauthorizedResponse({ description: 'Thiếu hoặc sai Bearer token.' })
+  @ApiNotFoundResponse({ description: 'Không tìm thấy view.' })
   findOne(
     @Req() req: Request & { user?: { id?: string } },
     @Param(
       'id',
       new ParseUUIDPipe({
         exceptionFactory: () =>
-          new BadRequestException('Sai dinh dang view id'),
+          new BadRequestException('Sai định dạng view id'),
       }),
     )
     id: string,
@@ -79,7 +118,7 @@ export class ViewsController {
     const userId = req.user?.id;
     if (!userId) {
       throw new UnauthorizedException(
-        'Khong xac dinh duoc nguoi dung dang nhap',
+        'Không xác định được người dùng đang đăng nhập',
       );
     }
 
@@ -88,13 +127,27 @@ export class ViewsController {
 
   @Patch(':id/published')
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Cập nhật view đã publish',
+    description:
+      'Cập nhật cấu hình hoặc nội dung đã publish của view thuộc người dùng đang đăng nhập.',
+  })
+  @ApiParam({ name: 'id', description: 'UUID của view.', format: 'uuid' })
+  @ApiBody({ type: UpdateViewDto })
+  @ApiOkResponse({ description: 'Cập nhật view đã publish thành công.' })
+  @ApiBadRequestResponse({
+    description: 'ID hoặc dữ liệu gửi lên không hợp lệ.',
+  })
+  @ApiUnauthorizedResponse({ description: 'Thiếu hoặc sai Bearer token.' })
+  @ApiNotFoundResponse({ description: 'Không tìm thấy view.' })
   updatePublished(
     @Req() req: Request & { user?: { id?: string } },
     @Param(
       'id',
       new ParseUUIDPipe({
         exceptionFactory: () =>
-          new BadRequestException('Sai dinh dang view id'),
+          new BadRequestException('Sai định dạng view id'),
       }),
     )
     id: string,
@@ -103,7 +156,7 @@ export class ViewsController {
     const userId = req.user?.id;
     if (!userId) {
       throw new UnauthorizedException(
-        'Khong xac dinh duoc nguoi dung dang nhap',
+        'Không xác định được người dùng đang đăng nhập',
       );
     }
 
@@ -112,13 +165,26 @@ export class ViewsController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Cập nhật view',
+    description: 'Cập nhật view thuộc người dùng đang đăng nhập.',
+  })
+  @ApiParam({ name: 'id', description: 'UUID của view.', format: 'uuid' })
+  @ApiBody({ type: UpdateViewDto })
+  @ApiOkResponse({ description: 'Cập nhật view thành công.' })
+  @ApiBadRequestResponse({
+    description: 'ID hoặc dữ liệu gửi lên không hợp lệ.',
+  })
+  @ApiUnauthorizedResponse({ description: 'Thiếu hoặc sai Bearer token.' })
+  @ApiNotFoundResponse({ description: 'Không tìm thấy view.' })
   update(
     @Req() req: Request & { user?: { id?: string } },
     @Param(
       'id',
       new ParseUUIDPipe({
         exceptionFactory: () =>
-          new BadRequestException('Sai dinh dang view id'),
+          new BadRequestException('Sai định dạng view id'),
       }),
     )
     id: string,
@@ -127,7 +193,7 @@ export class ViewsController {
     const userId = req.user?.id;
     if (!userId) {
       throw new UnauthorizedException(
-        'Khong xac dinh duoc nguoi dung dang nhap',
+        'Không xác định được người dùng đang đăng nhập',
       );
     }
 
@@ -136,13 +202,23 @@ export class ViewsController {
 
   @Post(':id/publish')
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Xuất bản view',
+    description: 'Xuất bản một view nháp thuộc người dùng đang đăng nhập.',
+  })
+  @ApiParam({ name: 'id', description: 'UUID của view.', format: 'uuid' })
+  @ApiOkResponse({ description: 'Xuất bản view thành công.' })
+  @ApiBadRequestResponse({ description: 'ID view không hợp lệ.' })
+  @ApiUnauthorizedResponse({ description: 'Thiếu hoặc sai Bearer token.' })
+  @ApiNotFoundResponse({ description: 'Không tìm thấy view.' })
   publish(
     @Req() req: Request & { user?: { id?: string } },
     @Param(
       'id',
       new ParseUUIDPipe({
         exceptionFactory: () =>
-          new BadRequestException('Sai dinh dang view id'),
+          new BadRequestException('Sai định dạng view id'),
       }),
     )
     id: string,
@@ -150,7 +226,7 @@ export class ViewsController {
     const userId = req.user?.id;
     if (!userId) {
       throw new UnauthorizedException(
-        'Khong xac dinh duoc nguoi dung dang nhap',
+        'Không xác định được người dùng đang đăng nhập',
       );
     }
 
@@ -158,11 +234,41 @@ export class ViewsController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.viewsService.remove(+id);
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Xóa view',
+    description: 'Xóa view thuộc người dùng đang đăng nhập.',
+  })
+  @ApiParam({ name: 'id', description: 'UUID của view.', format: 'uuid' })
+  @ApiNoContentResponse({ description: 'Xóa view thành công.' })
+  @ApiOkResponse({ description: 'Trả về kết quả xóa thành công.' })
+  @ApiBadRequestResponse({ description: 'ID view không hợp lệ.' })
+  @ApiUnauthorizedResponse({ description: 'Thiếu hoặc sai Bearer token.' })
+  @ApiNotFoundResponse({ description: 'Không tìm thấy view.' })
+  remove(
+    @Req() req: Request & { user?: { id?: string } },
+    @Param(
+      'id',
+      new ParseUUIDPipe({
+        exceptionFactory: () =>
+          new BadRequestException('Sai định dạng view id'),
+      }),
+    )
+    id: string,
+  ) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException(
+        'Không xác định được người dùng đang đăng nhập',
+      );
+    }
+
+    return this.viewsService.remove(userId, id);
   }
 }
 
+@ApiTags('View public')
 @Controller('v')
 export class PublicViewsController {
   constructor(
@@ -172,6 +278,20 @@ export class PublicViewsController {
 
   @Public()
   @Get(':slug')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Lấy view đã publish theo slug',
+    description:
+      'Trả về view đã publish theo slug. Bearer token là tùy chọn và có thể mở quyền truy cập riêng tư khi hợp lệ.',
+  })
+  @ApiParam({ name: 'slug', description: 'Slug của view đã publish.' })
+  @ApiQuery({
+    name: 'shareToken',
+    required: false,
+    description: 'Share token tùy chọn cho truy cập public có bảo vệ.',
+  })
+  @ApiOkResponse({ description: 'Trả về view đã publish thành công.' })
+  @ApiNotFoundResponse({ description: 'Không tìm thấy view đã publish.' })
   async findPublishedBySlug(
     @Req() req: Request,
     @Param('slug') slug: string,

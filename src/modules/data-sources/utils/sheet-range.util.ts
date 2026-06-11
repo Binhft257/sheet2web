@@ -7,8 +7,8 @@ const CELL_RANGE_REGEX = /^([A-Za-z]+)([1-9]\d*):([A-Za-z]+)([1-9]\d*)$/;
 const COLUMN_RANGE_REGEX = /^([A-Za-z]+):([A-Za-z]+)$/;
 const ROW_RANGE_REGEX = /^([1-9]\d*):([1-9]\d*)$/;
 
-const INVALID_RANGE_MESSAGE = 'Range A1 khong hop le.';
-const RANGE_WITH_SHEET_MESSAGE = 'Khong duoc truyen ten sheet trong range.';
+const INVALID_RANGE_MESSAGE = 'Range A1 không hợp lệ.';
+const RANGE_WITH_SHEET_MESSAGE = 'Không được truyền tên sheet trong range.';
 const RANGE_TOO_LARGE_MESSAGE = `Range qua lon. Vui long preview toi da ${PREVIEW_MAX_ROWS} dong.`;
 
 export function escapeSheetName(sheetName: string): string {
@@ -16,7 +16,10 @@ export function escapeSheetName(sheetName: string): string {
   return `'${escapedSheetName}'`;
 }
 
-export function buildA1Range(sheetName: string, rangeA1Notation: string): string {
+export function buildA1Range(
+  sheetName: string,
+  rangeA1Notation: string,
+): string {
   return `${escapeSheetName(sheetName)}!${rangeA1Notation}`;
 }
 

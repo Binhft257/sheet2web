@@ -33,11 +33,11 @@ export class ViewPermissionsService {
       .getOne();
 
     if (!targetUser) {
-      throw new NotFoundException('Khong tim thay user.');
+      throw new NotFoundException('Không tìm thấy user.');
     }
 
     if (targetUser.id === userId) {
-      throw new BadRequestException('Owner khong can duoc cap quyen rieng.');
+      throw new BadRequestException('Owner không cần được cấp quyền riêng.');
     }
 
     const existedPermission = await this.typeOrmDataSource.manager.findOne(
@@ -100,7 +100,7 @@ export class ViewPermissionsService {
     );
 
     if (!permission) {
-      throw new NotFoundException('Khong tim thay permission.');
+      throw new NotFoundException('Không tìm thấy permission.');
     }
 
     await this.typeOrmDataSource.manager.delete(ViewPermission, permission.id);
@@ -114,11 +114,11 @@ export class ViewPermissionsService {
     });
 
     if (!view) {
-      throw new NotFoundException('Khong tim thay view.');
+      throw new NotFoundException('Không tìm thấy view.');
     }
 
     if (view.ownerId !== userId) {
-      throw new ForbiddenException('Ban khong co quyen quan ly view nay.');
+      throw new ForbiddenException('Bạn không có quyền quản lý view này.');
     }
 
     return view;

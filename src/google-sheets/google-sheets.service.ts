@@ -36,7 +36,7 @@ export class GoogleSheetsService {
   ): Promise<GoogleSheetsMetadata> {
     const apiKey = this.configService.get<string>('GOOGLE_SHEETS_API_KEY');
     if (!apiKey) {
-      throw new InternalServerErrorException('Thieu GOOGLE_SHEETS_API_KEY');
+      throw new InternalServerErrorException('Thiếu GOOGLE_SHEETS_API_KEY');
     }
 
     const sheets = this.createSheetsClient(apiKey);
@@ -48,7 +48,8 @@ export class GoogleSheetsService {
           'properties.title,properties.locale,properties.timeZone,sheets.properties',
       });
 
-      const properties = (response.data?.properties ?? {}) as GoogleSheetProperties;
+      const properties = (response.data?.properties ??
+        {}) as GoogleSheetProperties;
       const rawSheets = (response.data?.sheets ?? []) as Array<{
         properties?: GoogleSheetTabProperties;
       }>;
@@ -100,7 +101,7 @@ export class GoogleSheetsService {
   async getValues(spreadsheetId: string, range: string): Promise<string[][]> {
     const apiKey = this.configService.get<string>('GOOGLE_SHEETS_API_KEY');
     if (!apiKey) {
-      throw new InternalServerErrorException('Thieu GOOGLE_SHEETS_API_KEY');
+      throw new InternalServerErrorException('Thiếu GOOGLE_SHEETS_API_KEY');
     }
 
     const sheets = this.createSheetsClient(apiKey);
@@ -131,7 +132,7 @@ export class GoogleSheetsService {
       return google.sheets({ version: 'v4', auth: apiKey });
     } catch {
       throw new InternalServerErrorException(
-        'Thieu package googleapis. Hay cai: npm install googleapis',
+        'Thiếu package googleapis. Hãy cài: npm install googleapis',
       );
     }
   }
@@ -139,14 +140,14 @@ export class GoogleSheetsService {
   private handleMetadataError(error: unknown): never {
     this.handleGoogleSheetsError(
       error,
-      'Khong doc duoc Google Sheet. Hay kiem tra link share public.',
+      'Không đọc được Google Sheet. Hãy kiểm tra link share public.',
     );
   }
 
   private handleValuesError(error: unknown): never {
     this.handleGoogleSheetsError(
       error,
-      'Khong doc duoc Google Sheet. Hay kiem tra quyen chia se hoac range.',
+      'Không đọc được Google Sheet. Hãy kiểm tra quyền chia sẻ hoặc range.',
     );
   }
 
@@ -161,7 +162,7 @@ export class GoogleSheetsService {
     }
 
     throw new ServiceUnavailableException(
-      'Google Sheets API tam thoi khong kha dung. Vui long thu lai sau.',
+      'Google Sheets API tạm thời không khả dụng. Vui lòng thử lại sau.',
     );
   }
 
@@ -175,8 +176,8 @@ export class GoogleSheetsService {
       return status;
     }
 
-    const responseStatus = (error as { response?: { status?: unknown } }).response
-      ?.status;
+    const responseStatus = (error as { response?: { status?: unknown } })
+      .response?.status;
     if (typeof responseStatus === 'number') {
       return responseStatus;
     }

@@ -20,7 +20,7 @@ export class AuthService {
   async validateUser(email: string, pass: string): Promise<any> {
     const user = await this.usersService.findOneByEmail(email);
     if (!user) {
-      throw new UnauthorizedException('Email or password is incorrect');
+      throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
 
     const isValidPassword = await comparePasswordHelper(
@@ -28,7 +28,7 @@ export class AuthService {
       user.passwordHash,
     );
     if (!isValidPassword) {
-      throw new UnauthorizedException('Email or password is incorrect');
+      throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
 
     return user;
